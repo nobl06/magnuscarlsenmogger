@@ -3,14 +3,13 @@
 #chmod +x run.sh
 
 
-# Automatically builds then runs your program with test inputs
-echo "🔨 Building..."
-cd build || exit
+#!/bin/bash
+
+mkdir -p build
+cd build
+cmake ..  # only needed first time
 make -s
 cd ..
 
-echo "🚀 Running MagnusCarlsenMogger..."
 ./build/MagnusCarlsenMogger -H test/moves_test.txt -m build/out.txt
 
-echo "📄 Output:"
-cat build/out.txt
