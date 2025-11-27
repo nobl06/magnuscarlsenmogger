@@ -41,13 +41,13 @@ void Board::initStartPosition() // initializing the piece position using a bitbo
 }
 
 void Board::print() const { //printing the board with current positions
-    for (int rank = 7; rank >= 0; --rank)
+    for (int row = 7; row >= 0; --row)
     {
-        std::cout << (rank + 1) << "  ";
+        std::cout << (row + 1) << "  ";
 
         for (int column = 0; column < 8; ++column)
         {
-            int squareIndex = rank * 8 + column;
+            int squareIndex = row * 8 + column;
 
             char piece = '.';
 
