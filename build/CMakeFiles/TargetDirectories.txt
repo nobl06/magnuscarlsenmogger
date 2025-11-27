@@ -1,0 +1,3 @@
+/home/nohan/magnuscarlsenmogger/build/CMakeFiles/MagnusCarlsenMogger.dir
+/home/nohan/magnuscarlsenmogger/build/CMakeFiles/edit_cache.dir
+/home/nohan/magnuscarlsenmogger/build/CMakeFiles/rebuild_cache.dir

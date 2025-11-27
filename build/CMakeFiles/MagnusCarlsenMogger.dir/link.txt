@@ -1,0 +1,1 @@
+/usr/bin/c++ CMakeFiles/MagnusCarlsenMogger.dir/src/main.cpp.o -o MagnusCarlsenMogger 
