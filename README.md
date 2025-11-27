@@ -1,6 +1,11 @@
 # MagnusCarlsenMogger
+<<<<<<< HEAD
 ##Nohan Blandin
 
+=======
+
+## hello
+>>>>>>> 1db8abc863fd74f5b0729f5eca412639f28620cd
 
 ## Getting started
 
