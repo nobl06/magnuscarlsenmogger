@@ -1,7 +1,7 @@
 #include "board.h"
 #include <iostream>
 
-void Board::clear()
+void Board::clear() //clear function (no board)
 {
     whitePawns   = 0ULL;
     whiteKnights = 0ULL;
@@ -18,7 +18,7 @@ void Board::clear()
     blackKing    = 0ULL;
 }
 
-void Board::initStartPosition()
+void Board::initStartPosition() // initializing the piece position using a bitboard
 {
     clear();
     for (int f = 0; f < 8; f++) {
@@ -27,6 +27,7 @@ void Board::initStartPosition()
     whiteRooks   = bit(0, 0) | bit(7, 0);
     whiteKnights = bit(1, 0) | bit(6, 0);
     whiteBishops = bit(2, 0) | bit(5, 0); 
+    whiteQueens  = bit(3, 0);
     whiteKing    = bit(4, 0);
 
     for (int f = 0; f < 8; f++) {
@@ -39,7 +40,7 @@ void Board::initStartPosition()
     blackKing    = bit(4, 7);
 }
 
-void Board::print() const {
+void Board::print() const { //printing the board with current positions
     for (int rank = 7; rank >= 0; --rank)
     {
         std::cout << (rank + 1) << "  ";

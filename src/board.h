@@ -25,14 +25,15 @@ class Board
 public:
     void clear();
     void initStartPosition();
-    static constexpr int sq(int file, int rank) { return rank * 8 + file; }
-    static constexpr int file(int sq) { return sq % 8; }
-    static constexpr int rank(int sq) { return sq / 8; }
+    void print() const;  
 
-    static constexpr uint64_t bit(int file, int rank) {
-        return 1ULL << sq(file, rank);
+    static constexpr int position(int column, int row) { return row * 8 + column; }
+    static constexpr int column(int position) { return position % 8; }
+    static constexpr int row(int position) { return position / 8; }
+
+    static constexpr std::uint64_t bit(int column, int row) {
+        return 1ULL << position(column, row);
     }
-    
 
 private:
     std::uint64_t whitePawns;
