@@ -1,4 +1,5 @@
 #include "board.h"
+#include <iostream>
 
 void Board::clear()
 {
@@ -37,3 +38,41 @@ void Board::initStartPosition()
     blackQueens  = bit(3, 7);
     blackKing    = bit(4, 7);
 }
+
+void Board::print() const {
+    for (int rank = 7; rank >= 0; --rank)
+    {
+        std::cout << (rank + 1) << "  ";
+
+        for (int column = 0; column < 8; ++column)
+        {
+            int squareIndex = rank * 8 + column;
+
+            char piece = '.';
+
+            std::uint64_t mask = 1ULL << squareIndex;
+
+            if (whitePawns   & mask) piece = 'P';
+            if (whiteKnights & mask) piece = 'N';
+            if (whiteBishops & mask) piece = 'B';
+            if (whiteRooks   & mask) piece = 'R';
+            if (whiteQueens  & mask) piece = 'Q';
+            if (whiteKing    & mask) piece = 'K';
+
+            if (blackPawns   & mask) piece = 'p';
+            if (blackKnights & mask) piece = 'n';
+            if (blackBishops & mask) piece = 'b';
+            if (blackRooks   & mask) piece = 'r';
+            if (blackQueens  & mask) piece = 'q';
+            if (blackKing    & mask) piece = 'k';
+
+            std::cout << piece << " ";
+        }
+
+        std::cout << "\n";
+    }
+
+    std::cout << "   a b c d e f g h\n";
+    }
+
+
