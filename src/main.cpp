@@ -1,4 +1,5 @@
 #include "debugger.h"
+#include "board.h"         
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -50,6 +51,10 @@ int main(int argc, char *argv[]) {
 
     print_vector(move_hist);
     print_file(outputfile);
+
+    Board board;
+    board.initStartPosition();
+    board.print();
 
     return 0;
 }
