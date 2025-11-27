@@ -5,11 +5,11 @@
 #include <vector>
 
 std::vector<std::string> read_file(std::string file) {
-    std::ifstream f(file);
+    std::ifstream f(file); // open file
     std::vector<std::string> lines;
     std::string line;
     while (std::getline(f, line)) {
-        lines.push_back(line);
+        lines.push_back(line); // adding each line of file to vector
     }
     return lines;
 }
@@ -22,7 +22,7 @@ void write_out(std::string out, std::string move) {
         return;
     }
 
-    file << move << "\n";
+    file << move << "\n"; // writing move in out
 
     file.close();
 }
@@ -33,10 +33,10 @@ int main(int argc, char *argv[]) {
 
     for (int i = 1; i < argc; i++) {
         if (std::string(argv[i]) == "-H") {
-            inputfile = argv[i + 1]; // FIXED
+            inputfile = argv[i + 1];
         }
         if (std::string(argv[i]) == "-m") {
-            outputfile = argv[i + 1]; // FIXED
+            outputfile = argv[i + 1];
         }
     }
 
