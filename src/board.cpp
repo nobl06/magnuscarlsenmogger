@@ -44,9 +44,9 @@ void Board::print() const {
     {
         std::cout << (rank + 1) << "  ";
 
-        for (int letter = 0; letter < 8; ++letter)
+        for (int column = 0; column < 8; ++column)
         {
-            int squareIndex = rank * 8 + letter;
+            int squareIndex = rank * 8 + column;
 
             char piece = '.';
 
@@ -75,4 +75,4 @@ void Board::print() const {
     std::cout << "   a b c d e f g h\n";
     }
 
-    
+
