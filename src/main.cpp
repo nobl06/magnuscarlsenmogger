@@ -1,3 +1,4 @@
+#include "debugger.h"
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -13,11 +14,24 @@ std::vector<std::string> read_file(std::string file) {
     return lines;
 }
 
+void write_out(std::string out, std::string move) {
+    std::ofstream file(out);
+
+    if (!file.is_open()) {
+        std::cerr << "Could not open file " << out << "\n";
+        return;
+    }
+
+    file << move << "\n";
+
+    file.close();
+}
+
 int main(int argc, char *argv[]) {
     std::string inputfile;
     std::string outputfile;
 
-    for (int i = 0; i < argc; i++) {
+    for (int i = 1; i < argc; i++) {
         if (std::string(argv[i]) == "-H") {
             inputfile = argv[i + 1]; // FIXED
         }
@@ -32,10 +46,10 @@ int main(int argc, char *argv[]) {
     }
 
     std::vector<std::string> move_hist = read_file(inputfile);
+    write_out(outputfile, "e1e8");
 
-    for (auto &m : move_hist) {
-        std::cout << m << "\n";
-    }
+    print_vector(move_hist);
+    print_file(outputfile);
 
     return 0;
 }

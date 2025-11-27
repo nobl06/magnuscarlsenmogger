@@ -4,4 +4,7 @@ project(MagnusCarlsenMogger)
 
 set(CMAKE_CXX_STANDARD 17)
 
-add_executable(MagnusCarlsenMogger src/main.cpp)
+add_executable(MagnusCarlsenMogger
+    src/main.cpp
+    src/debugger.cpp
+)
