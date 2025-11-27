@@ -72,7 +72,14 @@ void Board::print() const {
         std::cout << "\n";
     }
 
-    std::cout << "   a b c d e f g h\n";
-    }
+std::cout << "   a b c d e f g h\n";
+}
 
-
+std::string Move::toString() const {
+    std::string result;
+    result += static_cast<char>('a' + Board::column(from));
+    result += static_cast<char>('1' + Board::row(from));
+    result += static_cast<char>('a' + Board::column(to));
+    result += static_cast<char>('1' + Board::row(to));
+    return result;
+}
