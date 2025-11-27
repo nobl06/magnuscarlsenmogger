@@ -1,11 +1,12 @@
 #pragma once
-#include <cstdint>
+#include <cstdint>   // for std::uint64_t
 
 class Board
 {
 public:
     void clear();
     void initStartPosition();
+    void print() const;
 
 private:
     std::uint64_t whitePawns;
