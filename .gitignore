@@ -1,0 +1,27 @@
+# Build folder
+/build/
+build/
+cmake-build-*/
+
+# CMake generated files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+
+# Executables
+MagnusCarlsenMogger
+*.exe
+*.out
+
+# Editor/OS files
+*.swp
+*.swo
+*.tmp
+*.DS_Store
+
+# VSCode
+.vscode/
+
+# CLion
+.idea/
