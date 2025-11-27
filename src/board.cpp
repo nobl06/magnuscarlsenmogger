@@ -27,6 +27,7 @@ void Board::initStartPosition() // initializing the piece position using a bitbo
     whiteRooks   = bit(0, 0) | bit(7, 0);
     whiteKnights = bit(1, 0) | bit(6, 0);
     whiteBishops = bit(2, 0) | bit(5, 0); 
+    whiteQueens  = bit(3, 0);
     whiteKing    = bit(4, 0);
 
     for (int f = 0; f < 8; f++) {
