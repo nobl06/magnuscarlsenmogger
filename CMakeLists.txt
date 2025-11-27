@@ -7,4 +7,5 @@ set(CMAKE_CXX_STANDARD 17)
 add_executable(MagnusCarlsenMogger
     src/main.cpp
     src/debugger.cpp
+    src/board.cpp
 )
