@@ -6,9 +6,8 @@ class Board
 public:
     void clear();
     void initStartPosition();
-    void print() const;   // ← YOU MUST HAVE THIS
+    void print() const;  
 
-    // Square math helpers
     static constexpr int position(int column, int row) { return row * 8 + column; }
     static constexpr int column(int position) { return position % 8; }
     static constexpr int row(int position) { return position / 8; }
