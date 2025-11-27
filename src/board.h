@@ -6,6 +6,14 @@ class Board
 public:
     void clear();
     void initStartPosition();
+    static constexpr int sq(int file, int rank) { return rank * 8 + file; }
+    static constexpr int file(int sq) { return sq % 8; }
+    static constexpr int rank(int sq) { return sq / 8; }
+
+    static constexpr uint64_t bit(int file, int rank) {
+        return 1ULL << sq(file, rank);
+    }
+    
 
 private:
     std::uint64_t whitePawns;
