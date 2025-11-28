@@ -11,6 +11,7 @@ public:
     std::vector<Move> generatePseudoLegalMoves() const;
     
     void generatePawnMoves(std::vector<Move>& moves, int from) const;
+    void generateKnightMoves(std::vector<Move>& moves, int from) const;
     
 private:
     const Board& board;

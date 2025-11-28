@@ -76,6 +76,30 @@ void MoveGenerator::generatePawnMoves(std::vector<Move>& moves, int from) const 
     }
 }
 
+// KNIGHTS ------------------------
+
+void MoveGenerator::generateKnightMoves(std::vector<Move>& moves, int from) const {
+    int col = Board::column(from);
+    int row = Board::row(from);
+
+    const int dCol[8] = { 1,  2,  2,  1, -1, -2, -2, -1 };
+    const int dRow[8] = { 2,  1, -1, -2, -2, -1,  1,  2 };
+
+    for (int i = 0; i < 8; ++i) {
+        int nc = col + dCol[i];
+        int nr = row + dRow[i];
+        if (nc < 0 || nc > 7 || nr < 0 || nr > 7) continue;
+
+        int to = Board::position(nc, nr);
+
+        // skip if our own piece is there
+        if (board.isSquareOccupiedByColor(to, color)) continue;
+
+        moves.emplace_back(from, to);
+    }
+}
+
+
 std::vector<Move> MoveGenerator::generatePseudoLegalMoves() const {
     std::vector<Move> moves;
     
@@ -85,7 +109,13 @@ std::vector<Move> MoveGenerator::generatePseudoLegalMoves() const {
         int sq = Board::popLsb(pawns);
         generatePawnMoves(moves, sq);
     }
-    
+
+    // Knights move generator
+    std::uint64_t knights = (color == Color::WHITE) ? board.whiteKnights : board.blackKnights;
+    while (knights) {
+        int sq = Board::popLsb(knights);
+        generateKnightMoves(moves, sq);
+    }
     
     return moves;
 }
