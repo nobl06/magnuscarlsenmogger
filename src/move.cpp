@@ -1,6 +1,15 @@
 #include "move.h"
 #include "board.h"
 
+std::string Move::toString() const {
+    std::string result;
+    result += static_cast<char>('a' + Board::column(from));
+    result += static_cast<char>('1' + Board::row(from));
+    result += static_cast<char>('a' + Board::column(to));
+    result += static_cast<char>('1' + Board::row(to));
+    return result;
+}
+
 Move parseMove(std::string &s) {
     int startcol = s[0] - 'a';
     int startrow = s[1] - '1';

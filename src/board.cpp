@@ -74,11 +74,44 @@ void Board::print() const { // printing the board with current positions
     std::cout << "   a b c d e f g h\n";
 }
 
-std::string Move::toString() const {
-    std::string result;
-    result += static_cast<char>('a' + Board::column(from));
-    result += static_cast<char>('1' + Board::row(from));
-    result += static_cast<char>('a' + Board::column(to));
-    result += static_cast<char>('1' + Board::row(to));
-    return result;
+std::uint64_t Board::getAllWhitePieces() const {
+    return whitePawns | whiteKnights | whiteBishops | whiteRooks | whiteQueens | whiteKing;
+}
+
+std::uint64_t Board::getAllBlackPieces() const {
+    return blackPawns | blackKnights | blackBishops | blackRooks | blackQueens | blackKing;
+}
+
+std::uint64_t Board::getAllPieces() const {
+    return getAllWhitePieces() | getAllBlackPieces();
+}
+
+bool Board::isSquareEmpty(int pos) const {
+    std::uint64_t mask = 1ULL << pos;
+    return (getAllPieces() & mask) == 0;
+}
+
+bool Board::isSquareOccupiedByColor(int pos, Color color) const {
+    std::uint64_t mask = 1ULL << pos;
+    if (color == Color::WHITE) {
+        return (getAllWhitePieces() & mask) != 0;
+    } else {
+        return (getAllBlackPieces() & mask) != 0;
+    }
+}
+
+int Board::getLsb(std::uint64_t bb) {
+    // Simple portable version - count trailing zeros
+    int count = 0;
+    while ((bb & 1) == 0) {
+        bb >>= 1;
+        count++;
+    }
+    return count;
+}
+
+int Board::popLsb(std::uint64_t& bb) {
+    int pos = getLsb(bb);
+    bb &= bb - 1;  // Clear the least significant bit
+    return pos;
 }

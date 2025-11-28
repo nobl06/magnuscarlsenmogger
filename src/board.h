@@ -33,7 +33,19 @@ class Board {
         return 1ULL << position(column, row);
     }
 
-  private:
+    // Bitboard utility functions
+    std::uint64_t getAllWhitePieces() const;
+    std::uint64_t getAllBlackPieces() const;
+    std::uint64_t getAllPieces() const;
+    
+    bool isSquareEmpty(int pos) const;
+    bool isSquareOccupiedByColor(int pos, Color color) const;
+    
+    // Helper to get least significant bit position
+    static int getLsb(std::uint64_t bb);
+    // Helper to pop (extract and clear) least significant bit. Helps to not go through each square to find a specific piece
+    static int popLsb(std::uint64_t& bb);
+
     std::uint64_t whitePawns;
     std::uint64_t whiteKnights;
     std::uint64_t whiteBishops;
