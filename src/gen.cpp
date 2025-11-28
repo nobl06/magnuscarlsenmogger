@@ -1,5 +1,5 @@
 #include "gen.hpp"
-
+// PAWNS
 void MoveGenerator::generatePawnMoves(std::vector<Move>& moves, int from) const {
     int col = Board::column(from);
     int row = Board::row(from);
@@ -99,6 +99,77 @@ void MoveGenerator::generateKnightMoves(std::vector<Move>& moves, int from) cons
     }
 }
 
+//  BISHOPS ------------------------
+
+void MoveGenerator::generateBishopMoves(std::vector<Move>& moves, int from) const {
+    int col = Board::column(from);
+    int row = Board::row(from);
+
+    // 4 diagonal directions
+    const int dCol[4] = {  1,  1, -1, -1 };
+    const int dRow[4] = {  1, -1,  1, -1 };
+
+    for (int dir = 0; dir < 4; ++dir) {
+        int nc = col + dCol[dir];
+        int nr = row + dRow[dir];
+
+        while (nc >= 0 && nc < 8 && nr >= 0 && nr < 8) {
+            int to = Board::position(nc, nr);
+
+            if (board.isSquareOccupiedByColor(to, color)) {
+                // our own piece blocks further moves
+                break;
+            }
+
+            moves.emplace_back(from, to);
+
+            if (!board.isSquareEmpty(to)) {
+                // captured enemy → stop in this direction
+                break;
+            }
+
+            nc += dCol[dir];
+            nr += dRow[dir];
+        }
+    }
+}
+
+//  ROOKS ------------------------
+
+void MoveGenerator::generateRookMoves(std::vector<Move>& moves, int from) const {
+    int col = Board::column(from);
+    int row = Board::row(from);
+
+    // 4 straight directions: up, down, right, left
+    const int dCol[4] = {  0,  0,  1, -1 };
+    const int dRow[4] = {  1, -1,  0,  0 };
+
+    for (int dir = 0; dir < 4; ++dir) {
+        int nc = col + dCol[dir];
+        int nr = row + dRow[dir];
+
+        while (nc >= 0 && nc < 8 && nr >= 0 && nr < 8) {
+            int to = Board::position(nc, nr);
+
+            if (board.isSquareOccupiedByColor(to, color)) {
+                // Our own piece blocks
+                break;
+            }
+
+            moves.emplace_back(from, to);
+
+            if (!board.isSquareEmpty(to)) {
+                // Captured enemy → stop along this line
+                break;
+            }
+
+            nc += dCol[dir];
+            nr += dRow[dir];
+        }
+    }
+}
+
+
 
 std::vector<Move> MoveGenerator::generatePseudoLegalMoves() const {
     std::vector<Move> moves;
@@ -118,4 +189,19 @@ std::vector<Move> MoveGenerator::generatePseudoLegalMoves() const {
     }
     
     return moves;
+
+    // Bishops
+    std::uint64_t bishops = (color == Color::WHITE) ? board.whiteBishops : board.blackBishops;
+    while (bishops) {
+        int sq = Board::popLsb(bishops);
+        generateBishopMoves(moves, sq);
+    }
+
+      // Rooks
+    std::uint64_t rooks = (color == Color::WHITE) ? board.whiteRooks : board.blackRooks;
+    while (rooks) {
+        int sq = Board::popLsb(rooks);
+        generateRookMoves(moves, sq);
+    }
 }
+

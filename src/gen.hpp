@@ -12,7 +12,8 @@ public:
     
     void generatePawnMoves(std::vector<Move>& moves, int from) const;
     void generateKnightMoves(std::vector<Move>& moves, int from) const;
-    
+    void generateBishopMoves(std::vector<Move>& moves, int from) const;
+    void generateRookMoves  (std::vector<Move>& moves, int from) const;
 private:
     const Board& board;
     Color color;
