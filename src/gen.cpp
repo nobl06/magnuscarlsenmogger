@@ -169,6 +169,38 @@ void MoveGenerator::generateRookMoves(std::vector<Move>& moves, int from) const 
     }
 }
 
+//  QUEENS ------------------------
+
+void MoveGenerator::generateQueenMoves(std::vector<Move>& moves, int from) const {
+    generateBishopMoves(moves, from);
+    generateRookMoves(moves, from);  // queen moves = bishop + rook hence
+}
+
+// KING ------------------------
+
+void MoveGenerator::generateKingMoves(std::vector<Move>& moves, int from) const {
+    int col = Board::column(from);
+    int row = Board::row(from);
+
+    // Adjacent squares 
+    const int dCol[8] = { -1, 0, 1, -1, 1, -1, 0, 1 };
+    const int dRow[8] = { -1,-1,-1,  0, 0,  1, 1, 1 };
+
+    for (int i = 0; i < 8; ++i) {
+        int nc = col + dCol[i];
+        int nr = row + dRow[i];
+        if (nc < 0 || nc > 7 || nr < 0 || nr > 7) continue;
+
+        int to = Board::position(nc, nr);
+
+        if (board.isSquareOccupiedByColor(to, color)) continue;
+
+        moves.emplace_back(from, to);
+    }
+
+    // we dont yet check if the king is moving into check
+}.  // castling still not implemented
+
 
 
 std::vector<Move> MoveGenerator::generatePseudoLegalMoves() const {
@@ -187,8 +219,6 @@ std::vector<Move> MoveGenerator::generatePseudoLegalMoves() const {
         int sq = Board::popLsb(knights);
         generateKnightMoves(moves, sq);
     }
-    
-    return moves;
 
     // Bishops
     std::uint64_t bishops = (color == Color::WHITE) ? board.whiteBishops : board.blackBishops;
@@ -197,11 +227,28 @@ std::vector<Move> MoveGenerator::generatePseudoLegalMoves() const {
         generateBishopMoves(moves, sq);
     }
 
-      // Rooks
+    // Rooks
     std::uint64_t rooks = (color == Color::WHITE) ? board.whiteRooks : board.blackRooks;
     while (rooks) {
         int sq = Board::popLsb(rooks);
         generateRookMoves(moves, sq);
     }
+
+    // Queens 
+    std::uint64_t queens = (color == Color::WHITE) ? board.whiteQueens : board.blackQueens;
+    while (queens) {
+        int sq = Board::popLsb(queens);
+        generateQueenMoves(moves, sq);
+    }
+
+    // even though king is single piece, but we can still use popLsbp
+    std::uint64_t king = (color == Color::WHITE) ? board.whiteKing : board.blackKing;
+    if (king) {
+        int sq = Board::popLsb(king);
+        generateKingMoves(moves, sq);
+    }
+
+    return moves;
 }
+
 
