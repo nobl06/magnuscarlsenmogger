@@ -10,9 +10,7 @@ struct Move {
 
     Move() = default;
 
-    Move(uint8_t f, uint8_t t)
-        : from(f), to(t) {}
-    Move(uint8_t f, uint8_t t, PieceType p)
+    Move(uint8_t f, uint8_t t, PieceType p = PieceType::EMPTY)
         : from(f), to(t), promotion(p) {}
 
     std::string toString() const;

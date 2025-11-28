@@ -8,7 +8,7 @@ std::string Move::toString() const {
     result += static_cast<char>('a' + Board::column(to));
     result += static_cast<char>('1' + Board::row(to));
     return result;
-};
+}
 
 Move parseMove(std::string &s) {
     int startcol = s[0] - 'a';
