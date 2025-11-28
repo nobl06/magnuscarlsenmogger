@@ -30,6 +30,7 @@ class Board {
     PieceType pieceAt(int square) const;
     Color colorAt(int square) const;
     void update_move(Move m);
+    void gamestate(const std::vector<std::string>& move_hist);
 
     static constexpr int position(int column, int row) { return row * 8 + column; }
     static constexpr int column(int position) { return position % 8; }

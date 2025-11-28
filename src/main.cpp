@@ -29,6 +29,10 @@ void write_out(std::string out, std::string move) {
     file.close();
 }
 
+bool is_white(const std::vector<std::string>& move_hist) {
+    return move_hist.size() % 2 == 0;
+}
+
 int main(int argc, char *argv[]) {
     std::string inputfile;
     std::string outputfile;
@@ -52,11 +56,8 @@ int main(int argc, char *argv[]) {
 
     print_vector(move_hist);
     print_file(outputfile);
-    Move move = parseMove(move_hist[0]);
     Board board;
-    board.initStartPosition();
-    board.print();
-    board.update_move(move);
+    board.gamestate(move_hist);  
     board.print();
 
     return 0;

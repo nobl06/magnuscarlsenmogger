@@ -270,3 +270,16 @@ int Board::popLsb(std::uint64_t &bb) {
     bb &= bb - 1; // Clear the least significant bit
     return pos;
 }
+
+void Board::gamestate(const std::vector<std::string>& move_hist) {
+    initStartPosition(); //start from initial position
+
+    // Apply every move from the history
+    for (const std::string& mv : move_hist) {
+        if (mv.size() < 4) continue;  // Apply every move from history 
+                                    // skipping invalid lines
+
+        Move m = parseMove(mv);
+        update_move(m);
+    }
+}

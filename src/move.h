@@ -16,4 +16,4 @@ struct Move {
     std::string toString() const;
 };
 
-Move parseMove(std::string &s);
+Move parseMove(const std::string &s);

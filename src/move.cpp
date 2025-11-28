@@ -10,7 +10,7 @@ std::string Move::toString() const {
     return result;
 }
 
-Move parseMove(std::string &s) {
+Move parseMove(const std::string &s) {
     int startcol = s[0] - 'a';
     int startrow = s[1] - '1';
     int endcol = s[2] - 'a';
