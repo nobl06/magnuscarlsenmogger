@@ -1,4 +1,5 @@
 #include "board.h"
+#include "move.h"
 #include <iostream>
 
 void Board::clear() // clear function (no board)
@@ -71,14 +72,159 @@ void Board::print() const { // printing the board with current positions
         std::cout << "\n";
     }
 
-    std::cout << "   a b c d e f g h\n";
+    std::cout << "   a b c d e f g h\n\n";
 }
 
-std::string Move::toString() const {
-    std::string result;
-    result += static_cast<char>('a' + Board::column(from));
-    result += static_cast<char>('1' + Board::row(from));
-    result += static_cast<char>('a' + Board::column(to));
-    result += static_cast<char>('1' + Board::row(to));
-    return result;
+PieceType Board::pieceAt(int square) const {
+    std::uint64_t mask = 1ULL << square;
+
+    // White pieces
+    if (whitePawns & mask) return PieceType::PAWN;
+    if (whiteKnights & mask) return PieceType::KNIGHT;
+    if (whiteBishops & mask) return PieceType::BISHOP;
+    if (whiteRooks & mask) return PieceType::ROOK;
+    if (whiteQueens & mask) return PieceType::QUEEN;
+    if (whiteKing & mask) return PieceType::KING;
+
+    // Black pieces
+    if (blackPawns & mask) return PieceType::PAWN;
+    if (blackKnights & mask) return PieceType::KNIGHT;
+    if (blackBishops & mask) return PieceType::BISHOP;
+    if (blackRooks & mask) return PieceType::ROOK;
+    if (blackQueens & mask) return PieceType::QUEEN;
+    if (blackKing & mask) return PieceType::KING;
+
+    return PieceType::EMPTY;
+}
+
+Color Board::colorAt(int square) const {
+    std::uint64_t mask = 1ULL << square;
+
+    if ((whitePawns | whiteKnights | whiteBishops |
+         whiteRooks | whiteQueens | whiteKing) &
+        mask)
+        return Color::WHITE;
+
+    if ((blackPawns | blackKnights | blackBishops |
+         blackRooks | blackQueens | blackKing) &
+        mask)
+        return Color::BLACK;
+
+    return Color::WHITE;
+}
+
+void Board::update_move(Move m) {
+    PieceType fpt = pieceAt(m.from);
+    Color fc = colorAt(m.from);
+    PieceType tpt = pieceAt(m.to);
+    Color tc = colorAt(m.to);
+    PieceType finaltype = fpt;
+    if (m.promotion != PieceType::EMPTY) {
+        finaltype = m.promotion;
+    }
+
+    std::uint64_t maskFrom = 1ULL << m.from;
+    std::uint64_t maskTo = 1ULL << m.to;
+
+    // Removing piece in To square (if there is one)
+    whitePawns &= ~maskTo;
+    ;
+    whiteKnights &= ~maskTo;
+    whiteBishops &= ~maskTo;
+    whiteRooks &= ~maskTo;
+    whiteQueens &= ~maskTo;
+    whiteKing &= ~maskTo;
+
+    blackPawns &= ~maskTo;
+    blackKnights &= ~maskTo;
+    blackBishops &= ~maskTo;
+    blackRooks &= ~maskTo;
+    blackQueens &= ~maskTo;
+    blackKing &= ~maskTo;
+
+    // Removing piece in From square (there should be one since the move is legal)
+    if (fc == Color::WHITE) {
+        if (fpt == PieceType::PAWN) {
+            whitePawns &= ~maskFrom;
+        }
+        if (fpt == PieceType::KNIGHT) {
+            whiteKnights &= ~maskFrom;
+        }
+        if (fpt == PieceType::BISHOP) {
+            whiteBishops &= ~maskFrom;
+        }
+        if (fpt == PieceType::ROOK) {
+            whiteRooks &= ~maskFrom;
+        }
+        if (fpt == PieceType::QUEEN) {
+            whiteQueens &= ~maskFrom;
+        }
+        if (fpt == PieceType::KING) {
+            whiteKing &= ~maskFrom;
+        }
+    }
+
+    else {
+        if (fpt == PieceType::PAWN) {
+            blackPawns &= ~maskFrom;
+        }
+        if (fpt == PieceType::KNIGHT) {
+            blackKnights &= ~maskFrom;
+        }
+        if (fpt == PieceType::BISHOP) {
+            blackBishops &= ~maskFrom;
+        }
+        if (fpt == PieceType::ROOK) {
+            blackRooks &= ~maskFrom;
+        }
+        if (fpt == PieceType::QUEEN) {
+            blackQueens &= ~maskFrom;
+        }
+        if (fpt == PieceType::KING) {
+            blackKing &= ~maskFrom;
+        }
+    }
+
+    // Moving piece to To square
+    if (fc == Color::WHITE) {
+        if (finaltype == PieceType::PAWN) {
+            whitePawns |= maskTo;
+        }
+        if (finaltype == PieceType::KNIGHT) {
+            whiteKnights |= maskTo;
+        }
+        if (finaltype == PieceType::BISHOP) {
+            whiteBishops |= maskTo;
+        }
+        if (finaltype == PieceType::ROOK) {
+            whiteRooks |= maskTo;
+        }
+        if (finaltype == PieceType::QUEEN) {
+            whiteQueens |= maskTo;
+        }
+        if (finaltype == PieceType::KING) {
+            whiteKing |= maskTo;
+        }
+    }
+
+    else {
+        if (finaltype == PieceType::PAWN) {
+            blackPawns |= maskTo;
+        }
+        if (finaltype == PieceType::KNIGHT) {
+            blackKnights |= maskTo;
+        }
+        if (finaltype == PieceType::BISHOP) {
+            blackBishops |= maskTo;
+        }
+        if (finaltype == PieceType::ROOK) {
+            blackRooks |= maskTo;
+        }
+        if (finaltype == PieceType::QUEEN) {
+            blackQueens |= maskTo;
+        }
+        if (finaltype == PieceType::KING) {
+            blackKing |= maskTo;
+        }
+    }
 }

@@ -1,5 +1,6 @@
+#include "board.h"
 #include "debugger.h"
-#include "board.h"         
+#include "move.h"
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -51,9 +52,11 @@ int main(int argc, char *argv[]) {
 
     print_vector(move_hist);
     print_file(outputfile);
-
+    Move move = parseMove(move_hist[0]);
     Board board;
     board.initStartPosition();
+    board.print();
+    board.update_move(move);
     board.print();
 
     return 0;

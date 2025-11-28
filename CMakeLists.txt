@@ -8,4 +8,5 @@ add_executable(MagnusCarlsenMogger
     src/main.cpp
     src/debugger.cpp
     src/board.cpp
+    src/move.cpp
 )
