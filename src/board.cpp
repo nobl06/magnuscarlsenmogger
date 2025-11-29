@@ -17,6 +17,14 @@ void Board::clear() // clear function (no board)
     blackRooks = 0ULL;
     blackQueens = 0ULL;
     blackKing = 0ULL;
+
+    // Initialize game state
+    whiteCanKingside = false;
+    whiteCanQueenside = false;
+    blackCanKingside = false;
+    blackCanQueenside = false;
+    enPassantTarget = -1;
+    sideToMove = Color::WHITE;
 }
 
 void Board::initStartPosition() // initializing the piece position using a bitboard
@@ -39,6 +47,14 @@ void Board::initStartPosition() // initializing the piece position using a bitbo
     blackBishops = bit(2, 7) | bit(5, 7);
     blackQueens = bit(3, 7);
     blackKing = bit(4, 7);
+
+    // Set initial game state
+    whiteCanKingside = true;
+    whiteCanQueenside = true;
+    blackCanKingside = true;
+    blackCanQueenside = true;
+    enPassantTarget = -1;
+    sideToMove = Color::WHITE;
 }
 
 void Board::print() const { // printing the board with current positions
@@ -125,6 +141,65 @@ void Board::update_move(Move m) {
 
     std::uint64_t maskFrom = 1ULL << m.from;
     std::uint64_t maskTo = 1ULL << m.to;
+
+    // Clear en passant target from previous move
+    int oldEnPassant = enPassantTarget;
+    enPassantTarget = -1;
+
+    // Handle castling move (king moving 2 squares)
+    if (fpt == PieceType::KING && std::abs(static_cast<int>(m.to) - static_cast<int>(m.from)) == 2) {
+        int row = Board::row(m.from);
+        int fromCol = Board::column(m.from);
+        int toCol = Board::column(m.to);
+        
+        // Kingside castling (king moves right 2 squares)
+        if (toCol > fromCol) {
+            int rookFrom = position(7, row);  // Rook on h-file
+            int rookTo = position(5, row);    // Rook moves to f-file
+            std::uint64_t rookMaskFrom = 1ULL << rookFrom;
+            std::uint64_t rookMaskTo = 1ULL << rookTo;
+            
+            if (fc == Color::WHITE) {
+                whiteRooks &= ~rookMaskFrom;
+                whiteRooks |= rookMaskTo;
+            } else {
+                blackRooks &= ~rookMaskFrom;
+                blackRooks |= rookMaskTo;
+            }
+        }
+        // Queenside castling (king moves left 2 squares)
+        else {
+            int rookFrom = position(0, row);  // Rook on a-file
+            int rookTo = position(3, row);    // Rook moves to d-file
+            std::uint64_t rookMaskFrom = 1ULL << rookFrom;
+            std::uint64_t rookMaskTo = 1ULL << rookTo;
+            
+            if (fc == Color::WHITE) {
+                whiteRooks &= ~rookMaskFrom;
+                whiteRooks |= rookMaskTo;
+            } else {
+                blackRooks &= ~rookMaskFrom;
+                blackRooks |= rookMaskTo;
+            }
+        }
+    }
+
+    // Handle en passant capture
+    if (fpt == PieceType::PAWN && m.to == oldEnPassant) {
+        // Remove the captured pawn (which is not on the 'to' square but behind it)
+        int capturedPawnSquare = m.to + (fc == Color::WHITE ? -8 : 8);
+        std::uint64_t capturedMask = 1ULL << capturedPawnSquare;
+        if (fc == Color::WHITE) {
+            blackPawns &= ~capturedMask;
+        } else {
+            whitePawns &= ~capturedMask;
+        }
+    }
+
+    // Set en passant target if pawn moved 2 squares
+    if (fpt == PieceType::PAWN && std::abs(static_cast<int>(m.to) - static_cast<int>(m.from)) == 16) {
+        enPassantTarget = m.from + (fc == Color::WHITE ? 8 : -8);
+    }
 
     // Removing piece in To square (if there is one)
     whitePawns &= ~maskTo;
@@ -227,6 +302,39 @@ void Board::update_move(Move m) {
             blackKing |= maskTo;
         }
     }
+
+    // Update castling rights
+    if (fpt == PieceType::KING) {
+        if (fc == Color::WHITE) {
+            whiteCanKingside = false;
+            whiteCanQueenside = false;
+        } else {
+            blackCanKingside = false;
+            blackCanQueenside = false;
+        }
+    }
+    
+    // If rook moves from starting position, remove that castling right
+    if (fpt == PieceType::ROOK) {
+        if (fc == Color::WHITE) {
+            if (m.from == position(0, 0)) whiteCanQueenside = false;
+            if (m.from == position(7, 0)) whiteCanKingside = false;
+        } else {
+            if (m.from == position(0, 7)) blackCanQueenside = false;
+            if (m.from == position(7, 7)) blackCanKingside = false;
+        }
+    }
+    
+    // If rook is captured on starting square, remove that castling right
+    if (tpt == PieceType::ROOK) {
+        if (m.to == position(0, 0)) whiteCanQueenside = false;
+        if (m.to == position(7, 0)) whiteCanKingside = false;
+        if (m.to == position(0, 7)) blackCanQueenside = false;
+        if (m.to == position(7, 7)) blackCanKingside = false;
+    }
+
+    // Toggle side to move
+    sideToMove = (sideToMove == Color::WHITE) ? Color::BLACK : Color::WHITE;
 }
 
 std::uint64_t Board::getAllWhitePieces() const {
@@ -282,4 +390,120 @@ void Board::gamestate(const std::vector<std::string>& move_hist) {
         Move m = parseMove(mv);
         update_move(m);
     }
+}
+
+bool Board::isSquareAttackedBy(int square, Color attackerColor) const {
+    int targetCol = column(square);
+    int targetRow = row(square);
+    
+    std::uint64_t attackerPawns, attackerKnights, attackerBishops;
+    std::uint64_t attackerRooks, attackerQueens, attackerKing;
+    
+    if (attackerColor == Color::WHITE) {
+        attackerPawns = whitePawns;
+        attackerKnights = whiteKnights;
+        attackerBishops = whiteBishops;
+        attackerRooks = whiteRooks;
+        attackerQueens = whiteQueens;
+        attackerKing = whiteKing;
+    } else {
+        attackerPawns = blackPawns;
+        attackerKnights = blackKnights;
+        attackerBishops = blackBishops;
+        attackerRooks = blackRooks;
+        attackerQueens = blackQueens;
+        attackerKing = blackKing;
+    }
+    
+    // Check for pawn attacks
+    int pawnDir = (attackerColor == Color::WHITE) ? 1 : -1;
+    if (targetRow - pawnDir >= 0 && targetRow - pawnDir < 8) {
+        // Check left diagonal
+        if (targetCol > 0) {
+            int pawnSq = position(targetCol - 1, targetRow - pawnDir);
+            if (attackerPawns & (1ULL << pawnSq)) return true;
+        }
+        // Check right diagonal
+        if (targetCol < 7) {
+            int pawnSq = position(targetCol + 1, targetRow - pawnDir);
+            if (attackerPawns & (1ULL << pawnSq)) return true;
+        }
+    }
+    
+    // checks for any possible knight attacks
+    const int knightDCol[8] = { 1,  2,  2,  1, -1, -2, -2, -1 };
+    const int knightDRow[8] = { 2,  1, -1, -2, -2, -1,  1,  2 };
+    for (int i = 0; i < 8; ++i) {
+        int newcol = targetCol + knightDCol[i];
+        int newrow = targetRow + knightDRow[i];
+        if (newcol >= 0 && newcol < 8 && newrow >= 0 && newrow < 8) {
+            int knightSq = position(newcol, newrow);
+            if (attackerKnights & (1ULL << knightSq)) return true;
+        }
+    }
+    
+    // Checks for any possible king attacks
+    const int kingDCol[8] = { -1, 0, 1, -1, 1, -1, 0, 1 };
+    const int kingDRow[8] = { -1,-1,-1,  0, 0,  1, 1, 1 };
+    for (int i = 0; i < 8; ++i) {
+        int newcol = targetCol + kingDCol[i];
+        int newrow = targetRow + kingDRow[i];
+        if (newcol >= 0 && newcol < 8 && newrow >= 0 && newrow < 8) {
+            int kingSq = position(newcol, newrow);
+            if (attackerKing & (1ULL << kingSq)) return true;
+        }
+    }
+    
+    std::uint64_t allOccupied = getAllPieces();
+    
+    // Check for bishop/queen diagonal attacks
+    std::uint64_t diagonalAttackers = attackerBishops | attackerQueens;
+    const int diagDCol[4] = {  1,  1, -1, -1 };
+    const int diagDRow[4] = {  1, -1,  1, -1 };
+    for (int dir = 0; dir < 4; ++dir) {
+        int newcol = targetCol + diagDCol[dir];
+        int newrow = targetRow + diagDRow[dir];
+        while (newcol >= 0 && newcol < 8 && newrow >= 0 && newrow < 8) {
+            int sq = position(newcol, newrow);
+            std::uint64_t sqBit = 1ULL << sq;
+            
+            if (diagonalAttackers & sqBit) return true;
+            if (allOccupied & sqBit) break;
+            
+            newcol += diagDCol[dir];
+            newrow += diagDRow[dir];
+        }
+    }
+    
+    // Check for rook/queen straight attacks
+    std::uint64_t straightAttackers = attackerRooks | attackerQueens;
+    const int straightDCol[4] = {  0,  0,  1, -1 };
+    const int straightDRow[4] = {  1, -1,  0,  0 };
+    for (int dir = 0; dir < 4; ++dir) {
+        int nc = targetCol + straightDCol[dir];
+        int nr = targetRow + straightDRow[dir];
+        while (nc >= 0 && nc < 8 && nr >= 0 && nr < 8) {
+            int sq = position(nc, nr);
+            std::uint64_t sqBit = 1ULL << sq;
+            
+            if (straightAttackers & sqBit) return true;
+            if (allOccupied & sqBit) break;  // Blocked
+            
+            nc += straightDCol[dir];
+            nr += straightDRow[dir];
+        }
+    }
+    
+    return false;
+}
+
+bool Board::isKingInCheck(Color kingColor) const {
+    // Find the king position
+    std::uint64_t king = (kingColor == Color::WHITE) ? whiteKing : blackKing;
+    
+    int kingSq = getLsb(king);
+    
+    // Check if the king square is attacked by the opponent
+    Color opponent = (kingColor == Color::WHITE) ? Color::BLACK : Color::WHITE;
+    return isSquareAttackedBy(kingSq, opponent);
 }

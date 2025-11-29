@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <string>
+#include <vector>
 
 // Piece types
 enum class PieceType : uint8_t {
@@ -66,4 +67,16 @@ class Board {
     std::uint64_t blackRooks;
     std::uint64_t blackQueens;
     std::uint64_t blackKing;
+
+    // Game state tracking
+    bool whiteCanKingside;
+    bool whiteCanQueenside;
+    bool blackCanKingside;
+    bool blackCanQueenside;
+    int enPassantTarget;  // -1 if none, otherwise square index (0-63)
+    Color sideToMove;
+
+    // Attack and check detection
+    bool isSquareAttackedBy(int square, Color attackerColor) const;
+    bool isKingInCheck(Color kingColor) const;
 };

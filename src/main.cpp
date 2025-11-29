@@ -1,6 +1,7 @@
 #include "board.h"
 #include "debugger.h"
 #include "move.h"
+#include "gen.hpp"
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -52,13 +53,25 @@ int main(int argc, char *argv[]) {
     }
 
     std::vector<std::string> move_hist = read_file(inputfile);
-    write_out(outputfile, "e1e8");
 
     print_vector(move_hist);
-    print_file(outputfile);
+
     Board board;
     board.gamestate(move_hist);  
     board.print();
+    
+    // Generate moves for the side to move
+    MoveGenerator generator(board, board.sideToMove);
+    std::vector<Move> pseudoLegalMoves = generator.generatePseudoLegalMoves();
+    std::vector<Move> legalMoves = generator.filterLegalMoves(pseudoLegalMoves);
+    
+    
+    // Choose a move
+    Move chosenMove = chooseMove(legalMoves);
+    
+    write_out(outputfile, chosenMove.toString());
+    
+    print_file(outputfile);
 
     return 0;
 }

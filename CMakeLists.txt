@@ -9,4 +9,5 @@ add_executable(MagnusCarlsenMogger
     src/debugger.cpp
     src/board.cpp
     src/move.cpp
+    src/gen.cpp
 )

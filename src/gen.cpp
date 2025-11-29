@@ -1,4 +1,5 @@
 #include "gen.hpp"
+
 // PAWNS
 void MoveGenerator::generatePawnMoves(std::vector<Move>& moves, int from) const {
     int col = Board::column(from);
@@ -72,6 +73,23 @@ void MoveGenerator::generatePawnMoves(std::vector<Move>& moves, int from) const 
             } else {
                 moves.emplace_back(from, captureSq);
             }
+        }
+    }
+    
+    // Adds en passant captures if possible
+    if (board.enPassantTarget != -1) {
+        int epSquare = board.enPassantTarget;
+        int epCol = Board::column(epSquare);
+        int epRow = Board::row(epSquare);
+        
+        // Check if we can capture en passant to the left
+        if (col > 0 && epCol == col - 1 && epRow == row + direction) {
+            moves.emplace_back(from, epSquare);
+        }
+        
+        // Check if we can capture en passant to the right
+        if (col < 7 && epCol == col + 1 && epRow == row + direction) {
+            moves.emplace_back(from, epSquare);
         }
     }
 }
@@ -198,8 +216,51 @@ void MoveGenerator::generateKingMoves(std::vector<Move>& moves, int from) const 
         moves.emplace_back(from, to);
     }
 
-    // we dont yet check if the king is moving into check
-}.  // castling still not implemented
+    // Castling
+    std::uint64_t allOccupied = board.getAllPieces();
+    
+    if (color == Color::WHITE) {
+        // White kingside castling: e1 to g1
+        if (board.whiteCanKingside && from == Board::position(4, 0)) {
+            int f1 = Board::position(5, 0);
+            int g1 = Board::position(6, 0);
+            // Check that f1 and g1 are empty
+            if (!((allOccupied >> f1) & 1) && !((allOccupied >> g1) & 1)) {
+                moves.emplace_back(from, g1);
+            }
+        }
+        
+        // White queenside castling: e1 to c1
+        if (board.whiteCanQueenside && from == Board::position(4, 0)) {
+            int d1 = Board::position(3, 0);
+            int c1 = Board::position(2, 0);
+            int b1 = Board::position(1, 0);
+            // Check that b1, c1, d1 are empty
+            if (!((allOccupied >> d1) & 1) && !((allOccupied >> c1) & 1) && !((allOccupied >> b1) & 1)) {
+                moves.emplace_back(from, c1);
+            }
+        }
+    } else {
+        // Black kingside castling: e8 to g8
+        if (board.blackCanKingside && from == Board::position(4, 7)) {
+            int f8 = Board::position(5, 7);
+            int g8 = Board::position(6, 7);
+            if (!((allOccupied >> f8) & 1) && !((allOccupied >> g8) & 1)) {
+                moves.emplace_back(from, g8);
+            }
+        }
+        
+        // Black queenside castling: e8 to c8
+        if (board.blackCanQueenside && from == Board::position(4, 7)) {
+            int d8 = Board::position(3, 7);
+            int c8 = Board::position(2, 7);
+            int b8 = Board::position(1, 7);
+            if (!((allOccupied >> d8) & 1) && !((allOccupied >> c8) & 1) && !((allOccupied >> b8) & 1)) {
+                moves.emplace_back(from, c8);
+            }
+        }
+    }
+}
 
 
 
@@ -251,4 +312,48 @@ std::vector<Move> MoveGenerator::generatePseudoLegalMoves() const {
     return moves;
 }
 
+std::vector<Move> MoveGenerator::filterLegalMoves(const std::vector<Move>& pseudoLegalMoves) const {
+    std::vector<Move> legalMoves;
+    
+    for (const Move& move : pseudoLegalMoves) {
+        // Make a copy of the board to test the move
+        Board testBoard = board;
+        testBoard.update_move(move);
+        
+        // We check if our king is in check after the move. 
+        // Note: after update_move, sideToMove has been toggled, so we check the opposite color
+        Color ourColor = (testBoard.sideToMove == Color::WHITE) ? Color::BLACK : Color::WHITE;
+        
+        // check if the castling move is legal
+        PieceType movedPiece = board.pieceAt(move.from);
+        if (movedPiece == PieceType::KING && std::abs(static_cast<int>(move.to) - static_cast<int>(move.from)) == 2) {
+            int fromCol = Board::column(move.from);
+            int toCol = Board::column(move.to);
+            int row = Board::row(move.from);
+
+
+            // Check if the king is in check before castling
+            if (board.isKingInCheck(ourColor)) {
+                continue;
+            }
+            
+            // Check if the king is in check while castling
+            int middleCol = (fromCol + toCol) / 2;
+            int middleSq = Board::position(middleCol, row);
+            if (board.isSquareAttackedBy(middleSq, (ourColor == Color::WHITE) ? Color::BLACK : Color::WHITE)) {
+                continue;
+            }
+        }
+        
+        if (!testBoard.isKingInCheck(ourColor)) {
+            legalMoves.emplace_back(move);
+        }
+    }
+    
+    return legalMoves;
+}
+
+Move chooseMove(const std::vector<Move>& legalMoves) {
+    return legalMoves[0];
+}
 

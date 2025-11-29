@@ -9,6 +9,7 @@ public:
         : board(b), color(sideToMove) {}
     
     std::vector<Move> generatePseudoLegalMoves() const;
+    std::vector<Move> filterLegalMoves(const std::vector<Move>& pseudoLegalMoves) const;
     
     void generatePawnMoves(std::vector<Move>& moves, int from) const;
     void generateKnightMoves(std::vector<Move>& moves, int from) const;
@@ -21,3 +22,5 @@ private:
     const Board& board;
     Color color;
 };
+
+Move chooseMove(const std::vector<Move>& legalMoves);
