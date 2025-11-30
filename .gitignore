@@ -11,6 +11,10 @@ Makefile
 
 # Executables
 MagnusCarlsenMogger
+perft_test
+unit_test
+board_test
+move_test
 *.exe
 *.out
 
