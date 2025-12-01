@@ -4,7 +4,7 @@
 #include <vector>
 
 // Piece types
-enum class PieceType : uint8_t {
+enum PieceType : uint8_t {
     EMPTY = 0,
     PAWN,
     KNIGHT,
@@ -15,7 +15,7 @@ enum class PieceType : uint8_t {
 };
 
 // Colors
-enum class Color : uint8_t {
+enum Color : uint8_t {
     WHITE = 0,
     BLACK = 1
 };
@@ -31,7 +31,7 @@ class Board {
     PieceType pieceAt(int square) const;
     Color colorAt(int square) const;
     void update_move(Move m);
-    void gamestate(const std::vector<std::string>& move_hist);
+    void gamestate(const std::vector<std::string> &move_hist);
 
     static constexpr int position(int column, int row) { return row * 8 + column; }
     static constexpr int column(int position) { return position % 8; }
@@ -45,35 +45,24 @@ class Board {
     std::uint64_t getAllWhitePieces() const;
     std::uint64_t getAllBlackPieces() const;
     std::uint64_t getAllPieces() const;
-    
+
     bool isSquareEmpty(int pos) const;
     bool isSquareOccupiedByColor(int pos, Color color) const;
-    
+
     // Helper to get least significant bit position
     static int getLsb(std::uint64_t bb);
     // Helper to pop (extract and clear) least significant bit. Helps to not go through each square to find a specific piece
-    static int popLsb(std::uint64_t& bb);
+    static int popLsb(std::uint64_t &bb);
 
-    std::uint64_t whitePawns;
-    std::uint64_t whiteKnights;
-    std::uint64_t whiteBishops;
-    std::uint64_t whiteRooks;
-    std::uint64_t whiteQueens;
-    std::uint64_t whiteKing;
-
-    std::uint64_t blackPawns;
-    std::uint64_t blackKnights;
-    std::uint64_t blackBishops;
-    std::uint64_t blackRooks;
-    std::uint64_t blackQueens;
-    std::uint64_t blackKing;
+    // bitboards[Color][PieceType]
+    uint64_t bitboards[2][7];
 
     // Game state tracking
     bool whiteCanKingside;
     bool whiteCanQueenside;
     bool blackCanKingside;
     bool blackCanQueenside;
-    int enPassantTarget;  // -1 if none, otherwise square index (0-63)
+    int enPassantTarget; // -1 if none, otherwise square index (0-63)
     Color sideToMove;
 
     // Attack and check detection

@@ -10,4 +10,6 @@ add_executable(MagnusCarlsenMogger
     src/board.cpp
     src/move.cpp
     src/gen.cpp
+    src/evaluate.cpp
+    src/piece_values.cpp
 )
