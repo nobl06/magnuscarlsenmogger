@@ -1,7 +1,8 @@
 #include "board.h"
 #include "debugger.h"
-#include "move.h"
+#include "evaluate.h"
 #include "gen.hpp"
+#include "move.h"
 #include "eval/psqt.h"
 #include <fstream>
 #include <iostream>
@@ -31,7 +32,7 @@ void write_out(std::string out, std::string move) {
     file.close();
 }
 
-bool is_white(const std::vector<std::string>& move_hist) {
+bool is_white(const std::vector<std::string> &move_hist) {
     return move_hist.size() % 2 == 0;
 }
 
@@ -61,20 +62,22 @@ int main(int argc, char *argv[]) {
     print_vector(move_hist);
 
     Board board;
-    board.gamestate(move_hist);  
+    board.gamestate(move_hist);
     board.print();
-    
+
+    // Printing evaluation of position
+    std::cout << "Evaluation = " << evaluate(board, board.sideToMove) << "\n";
+
     // Generate moves for the side to move
     MoveGenerator generator(board, board.sideToMove);
     std::vector<Move> pseudoLegalMoves = generator.generatePseudoLegalMoves();
     std::vector<Move> legalMoves = generator.filterLegalMoves(pseudoLegalMoves);
-    
-    
+
     // Choose a move
     Move chosenMove = chooseMove(legalMoves);
-    
+
     write_out(outputfile, chosenMove.toString());
-    
+
     print_file(outputfile);
 
     return 0;

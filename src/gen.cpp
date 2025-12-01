@@ -1,23 +1,23 @@
 #include "gen.hpp"
 
-// PAWNS
-void MoveGenerator::generatePawnMoves(std::vector<Move>& moves, int from) const {
+// PAWNS ------------------------
+void MoveGenerator::generatePawnMoves(std::vector<Move> &moves, int from) const {
     int col = Board::column(from);
     int row = Board::row(from);
-    
+
     // Determine direction and starting rank based on color
     int direction = (color == Color::WHITE) ? 1 : -1;
     int startRank = (color == Color::WHITE) ? 1 : 6;
     int promotionRank = (color == Color::WHITE) ? 7 : 0;
-    
+
     std::uint64_t allOccupied = board.getAllPieces();
     std::uint64_t enemyOccupied = (color == Color::WHITE) ? board.getAllBlackPieces() : board.getAllWhitePieces();
-    
+
     // Every basic forward move
     int toSq = from + direction * 8;
     if (row + direction >= 0 && row + direction < 8) {
         std::uint64_t toBit = 1ULL << toSq;
-        
+
         if (!(allOccupied & toBit)) {
             if (row + direction == promotionRank) {
                 moves.emplace_back(from, toSq, PieceType::QUEEN);
@@ -37,15 +37,15 @@ void MoveGenerator::generatePawnMoves(std::vector<Move>& moves, int from) const 
             }
         }
     }
-    
+
     // all the captures that can be done to the left
     if (col > 0 && row + direction >= 0 && row + direction < 8) {
         int captureSq = from + direction * 8 - 1;
         std::uint64_t captureBit = 1ULL << captureSq;
-        
+
         if (enemyOccupied & captureBit) {
             int captureRank = Board::row(captureSq);
-            
+
             if (captureRank == promotionRank) {
                 moves.emplace_back(from, captureSq, PieceType::QUEEN);
                 moves.emplace_back(from, captureSq, PieceType::ROOK);
@@ -56,15 +56,15 @@ void MoveGenerator::generatePawnMoves(std::vector<Move>& moves, int from) const 
             }
         }
     }
-    
+
     // all the captures that can be done to the right
     if (col < 7 && row + direction >= 0 && row + direction < 8) {
         int captureSq = from + direction * 8 + 1;
         std::uint64_t captureBit = 1ULL << captureSq;
-        
+
         if (enemyOccupied & captureBit) {
             int captureRank = Board::row(captureSq);
-            
+
             if (captureRank == promotionRank) {
                 moves.emplace_back(from, captureSq, PieceType::QUEEN);
                 moves.emplace_back(from, captureSq, PieceType::ROOK);
@@ -75,18 +75,18 @@ void MoveGenerator::generatePawnMoves(std::vector<Move>& moves, int from) const 
             }
         }
     }
-    
+
     // Adds en passant captures if possible
     if (board.enPassantTarget != -1) {
         int epSquare = board.enPassantTarget;
         int epCol = Board::column(epSquare);
         int epRow = Board::row(epSquare);
-        
+
         // Check if we can capture en passant to the left
         if (col > 0 && epCol == col - 1 && epRow == row + direction) {
             moves.emplace_back(from, epSquare);
         }
-        
+
         // Check if we can capture en passant to the right
         if (col < 7 && epCol == col + 1 && epRow == row + direction) {
             moves.emplace_back(from, epSquare);
@@ -96,12 +96,12 @@ void MoveGenerator::generatePawnMoves(std::vector<Move>& moves, int from) const 
 
 // KNIGHTS ------------------------
 
-void MoveGenerator::generateKnightMoves(std::vector<Move>& moves, int from) const {
+void MoveGenerator::generateKnightMoves(std::vector<Move> &moves, int from) const {
     int col = Board::column(from);
     int row = Board::row(from);
 
-    const int dCol[8] = { 1,  2,  2,  1, -1, -2, -2, -1 };
-    const int dRow[8] = { 2,  1, -1, -2, -2, -1,  1,  2 };
+    const int dCol[8] = {1, 2, 2, 1, -1, -2, -2, -1};
+    const int dRow[8] = {2, 1, -1, -2, -2, -1, 1, 2};
 
     for (int i = 0; i < 8; ++i) {
         int nc = col + dCol[i];
@@ -119,13 +119,13 @@ void MoveGenerator::generateKnightMoves(std::vector<Move>& moves, int from) cons
 
 //  BISHOPS ------------------------
 
-void MoveGenerator::generateBishopMoves(std::vector<Move>& moves, int from) const {
+void MoveGenerator::generateBishopMoves(std::vector<Move> &moves, int from) const {
     int col = Board::column(from);
     int row = Board::row(from);
 
     // 4 diagonal directions
-    const int dCol[4] = {  1,  1, -1, -1 };
-    const int dRow[4] = {  1, -1,  1, -1 };
+    const int dCol[4] = {1, 1, -1, -1};
+    const int dRow[4] = {1, -1, 1, -1};
 
     for (int dir = 0; dir < 4; ++dir) {
         int nc = col + dCol[dir];
@@ -154,13 +154,13 @@ void MoveGenerator::generateBishopMoves(std::vector<Move>& moves, int from) cons
 
 //  ROOKS ------------------------
 
-void MoveGenerator::generateRookMoves(std::vector<Move>& moves, int from) const {
+void MoveGenerator::generateRookMoves(std::vector<Move> &moves, int from) const {
     int col = Board::column(from);
     int row = Board::row(from);
 
     // 4 straight directions: up, down, right, left
-    const int dCol[4] = {  0,  0,  1, -1 };
-    const int dRow[4] = {  1, -1,  0,  0 };
+    const int dCol[4] = {0, 0, 1, -1};
+    const int dRow[4] = {1, -1, 0, 0};
 
     for (int dir = 0; dir < 4; ++dir) {
         int nc = col + dCol[dir];
@@ -189,20 +189,20 @@ void MoveGenerator::generateRookMoves(std::vector<Move>& moves, int from) const 
 
 //  QUEENS ------------------------
 
-void MoveGenerator::generateQueenMoves(std::vector<Move>& moves, int from) const {
+void MoveGenerator::generateQueenMoves(std::vector<Move> &moves, int from) const {
     generateBishopMoves(moves, from);
-    generateRookMoves(moves, from);  // queen moves = bishop + rook hence
+    generateRookMoves(moves, from); // queen moves = bishop + rook hence
 }
 
 // KING ------------------------
 
-void MoveGenerator::generateKingMoves(std::vector<Move>& moves, int from) const {
+void MoveGenerator::generateKingMoves(std::vector<Move> &moves, int from) const {
     int col = Board::column(from);
     int row = Board::row(from);
 
-    // Adjacent squares 
-    const int dCol[8] = { -1, 0, 1, -1, 1, -1, 0, 1 };
-    const int dRow[8] = { -1,-1,-1,  0, 0,  1, 1, 1 };
+    // Adjacent squares
+    const int dCol[8] = {-1, 0, 1, -1, 1, -1, 0, 1};
+    const int dRow[8] = {-1, -1, -1, 0, 0, 1, 1, 1};
 
     for (int i = 0; i < 8; ++i) {
         int nc = col + dCol[i];
@@ -218,7 +218,7 @@ void MoveGenerator::generateKingMoves(std::vector<Move>& moves, int from) const 
 
     // Castling
     std::uint64_t allOccupied = board.getAllPieces();
-    
+
     if (color == Color::WHITE) {
         // White kingside castling: e1 to g1
         if (board.whiteCanKingside && from == Board::position(4, 0)) {
@@ -229,7 +229,7 @@ void MoveGenerator::generateKingMoves(std::vector<Move>& moves, int from) const 
                 moves.emplace_back(from, g1);
             }
         }
-        
+
         // White queenside castling: e1 to c1
         if (board.whiteCanQueenside && from == Board::position(4, 0)) {
             int d1 = Board::position(3, 0);
@@ -249,7 +249,7 @@ void MoveGenerator::generateKingMoves(std::vector<Move>& moves, int from) const 
                 moves.emplace_back(from, g8);
             }
         }
-        
+
         // Black queenside castling: e8 to c8
         if (board.blackCanQueenside && from == Board::position(4, 7)) {
             int d8 = Board::position(3, 7);
@@ -262,48 +262,48 @@ void MoveGenerator::generateKingMoves(std::vector<Move>& moves, int from) const 
     }
 }
 
-
-
 std::vector<Move> MoveGenerator::generatePseudoLegalMoves() const {
     std::vector<Move> moves;
-    
-    // Generate pawn moves using efficient bitboard iteration
-    std::uint64_t pawns = (color == Color::WHITE) ? board.whitePawns : board.blackPawns;
+
+    int c = color; // WHITE = 0, BLACK = 1
+
+    // Pawns
+    uint64_t pawns = board.bitboards[c][PAWN];
     while (pawns) {
         int sq = Board::popLsb(pawns);
         generatePawnMoves(moves, sq);
     }
 
-    // Knights move generator
-    std::uint64_t knights = (color == Color::WHITE) ? board.whiteKnights : board.blackKnights;
+    // Knights
+    uint64_t knights = board.bitboards[c][KNIGHT];
     while (knights) {
         int sq = Board::popLsb(knights);
         generateKnightMoves(moves, sq);
     }
 
     // Bishops
-    std::uint64_t bishops = (color == Color::WHITE) ? board.whiteBishops : board.blackBishops;
+    uint64_t bishops = board.bitboards[c][BISHOP];
     while (bishops) {
         int sq = Board::popLsb(bishops);
         generateBishopMoves(moves, sq);
     }
 
     // Rooks
-    std::uint64_t rooks = (color == Color::WHITE) ? board.whiteRooks : board.blackRooks;
+    uint64_t rooks = board.bitboards[c][ROOK];
     while (rooks) {
         int sq = Board::popLsb(rooks);
         generateRookMoves(moves, sq);
     }
 
-    // Queens 
-    std::uint64_t queens = (color == Color::WHITE) ? board.whiteQueens : board.blackQueens;
+    // Queens
+    uint64_t queens = board.bitboards[c][QUEEN];
     while (queens) {
         int sq = Board::popLsb(queens);
         generateQueenMoves(moves, sq);
     }
 
-    // even though king is single piece, but we can still use popLsbp
-    std::uint64_t king = (color == Color::WHITE) ? board.whiteKing : board.blackKing;
+    // King
+    uint64_t king = board.bitboards[c][KING];
     if (king) {
         int sq = Board::popLsb(king);
         generateKingMoves(moves, sq);
@@ -312,18 +312,18 @@ std::vector<Move> MoveGenerator::generatePseudoLegalMoves() const {
     return moves;
 }
 
-std::vector<Move> MoveGenerator::filterLegalMoves(const std::vector<Move>& pseudoLegalMoves) const {
+std::vector<Move> MoveGenerator::filterLegalMoves(const std::vector<Move> &pseudoLegalMoves) const {
     std::vector<Move> legalMoves;
-    
-    for (const Move& move : pseudoLegalMoves) {
+
+    for (const Move &move : pseudoLegalMoves) {
         // Make a copy of the board to test the move
         Board testBoard = board;
         testBoard.update_move(move);
-        
-        // We check if our king is in check after the move. 
+
+        // We check if our king is in check after the move.
         // Note: after update_move, sideToMove has been toggled, so we check the opposite color
         Color ourColor = (testBoard.sideToMove == Color::WHITE) ? Color::BLACK : Color::WHITE;
-        
+
         // check if the castling move is legal
         PieceType movedPiece = board.pieceAt(move.from);
         if (movedPiece == PieceType::KING && std::abs(static_cast<int>(move.to) - static_cast<int>(move.from)) == 2) {
@@ -331,12 +331,11 @@ std::vector<Move> MoveGenerator::filterLegalMoves(const std::vector<Move>& pseud
             int toCol = Board::column(move.to);
             int row = Board::row(move.from);
 
-
             // Check if the king is in check before castling
             if (board.isKingInCheck(ourColor)) {
                 continue;
             }
-            
+
             // Check if the king is in check while castling
             int middleCol = (fromCol + toCol) / 2;
             int middleSq = Board::position(middleCol, row);
@@ -344,16 +343,15 @@ std::vector<Move> MoveGenerator::filterLegalMoves(const std::vector<Move>& pseud
                 continue;
             }
         }
-        
+
         if (!testBoard.isKingInCheck(ourColor)) {
             legalMoves.emplace_back(move);
         }
     }
-    
+
     return legalMoves;
 }
 
-Move chooseMove(const std::vector<Move>& legalMoves) {
+Move chooseMove(const std::vector<Move> &legalMoves) {
     return legalMoves[0];
 }
-
