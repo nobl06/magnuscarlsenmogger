@@ -13,6 +13,8 @@ add_executable(MagnusCarlsenMogger
     src/evaluate.cpp
     src/piece_values.cpp
     src/eval/psqt.cpp
+    src/eval/material.cpp
+    src/eval/positional.cpp
 )
 
 # Perft test executable

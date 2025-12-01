@@ -415,3 +415,206 @@ bool Board::isKingInCheck(Color kingColor) const {
     Color opponent = (kingColor == Color::WHITE) ? Color::BLACK : Color::WHITE;
     return isSquareAttackedBy(kingSq, opponent);
 }
+
+// Bitboard Utility Functions
+
+int Board::popcount(uint64_t bb) {
+    // Parallel bit counting algorithm or SWAR algorithm
+    bb = bb - ((bb >> 1) & 0x5555555555555555ULL);
+    bb = (bb & 0x3333333333333333ULL) + ((bb >> 2) & 0x3333333333333333ULL);
+    bb = (bb + (bb >> 4)) & 0x0F0F0F0F0F0F0F0FULL;
+    return (bb * 0x0101010101010101ULL) >> 56;
+}
+
+bool Board::moreThanOne(uint64_t bb) {
+    return bb & (bb - 1);
+}
+
+uint64_t Board::shiftUp(uint64_t bb) {
+    return bb << 8;
+}
+
+uint64_t Board::shiftDown(uint64_t bb) {
+    return bb >> 8;
+}
+//THe FEFE is a mask to prevent wrapping around the edges of the board
+uint64_t Board::shiftRight(uint64_t bb) {
+    return (bb & 0xFEFEFEFEFEFEFEFEULL) << 1;
+}
+//Same here with 7F7F... = 01111111 01111111 01111111 .. in binary
+uint64_t Board::shiftLeft(uint64_t bb) {
+    return (bb & 0x7F7F7F7F7F7F7F7FULL) >> 1;
+}
+// 010101.. = 00000001 00000001 00000001 .. in binary
+uint64_t Board::columnBB(int column) {
+    return 0x0101010101010101ULL << column;
+}
+
+uint64_t Board::rowBB(int row) {
+    return 0xFFULL << (row * 8);
+}
+
+uint64_t Board::adjacentColumnsBB(int column) {
+    uint64_t result = 0;
+    if (column > 0) result |= columnBB(column - 1);
+    if (column < 7) result |= columnBB(column + 1);
+    return result;
+}
+
+// Distance Functions
+
+int Board::distance(int sq1, int sq2) {
+    int col1 = column(sq1);
+    int row1 = row(sq1);
+    int col2 = column(sq2);
+    int row2 = row(sq2);
+    return std::max(std::abs(col1 - col2), std::abs(row1 - row2));
+}
+
+int Board::columnDistance(int sq1, int sq2) {
+    return std::abs(column(sq1) - column(sq2));
+}
+
+// Attack Generation Functions
+
+uint64_t Board::getKnightAttacks(int square) {
+    uint64_t attacks = 0;
+    int col = column(square);
+    int r = row(square);
+    
+    const int offsets[8][2] = {
+        {-2, -1}, {-2, 1}, {-1, -2}, {-1, 2},
+        {1, -2}, {1, 2}, {2, -1}, {2, 1}
+    };
+    
+    for (auto [dc, dr] : offsets) {
+        int newCol = col + dc;
+        int newRow = r + dr;
+        if (newCol >= 0 && newCol < 8 && newRow >= 0 && newRow < 8) {
+            attacks |= (1ULL << position(newCol, newRow));
+        }
+    }
+    
+    return attacks;
+}
+
+uint64_t Board::getBishopAttacks(int square, uint64_t occupied) {
+    uint64_t attacks = 0;
+    int col = column(square);
+    int r = row(square);
+    
+    const int directions[4][2] = {{1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
+    
+    for (auto [dc, dr] : directions) {
+        int c = col + dc;
+        int rr = r + dr;
+        while (c >= 0 && c < 8 && rr >= 0 && rr < 8) {
+            int sq = position(c, rr);
+            attacks |= (1ULL << sq);
+            if (occupied & (1ULL << sq)) break;
+            c += dc;
+            rr += dr;
+        }
+    }
+    
+    return attacks;
+}
+
+uint64_t Board::getRookAttacks(int square, uint64_t occupied) {
+    uint64_t attacks = 0;
+    int col = column(square);
+    int r = row(square);
+    
+    const int directions[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+    
+    for (auto [dc, dr] : directions) {
+        int c = col + dc;
+        int rr = r + dr;
+        while (c >= 0 && c < 8 && rr >= 0 && rr < 8) {
+            int sq = position(c, rr);
+            attacks |= (1ULL << sq);
+            if (occupied & (1ULL << sq)) break;
+            c += dc;
+            rr += dr;
+        }
+    }
+    
+    return attacks;
+}
+
+uint64_t Board::getQueenAttacks(int square, uint64_t occupied) {
+    return getBishopAttacks(square, occupied) | getRookAttacks(square, occupied);
+}
+
+uint64_t Board::getKingAttacks(int square) {
+    uint64_t attacks = 0;
+    int col = column(square);
+    int r = row(square);
+    
+    for (int dc = -1; dc <= 1; ++dc) {
+        for (int dr = -1; dr <= 1; ++dr) {
+            if (dc == 0 && dr == 0) continue;
+            int newCol = col + dc;
+            int newRow = r + dr;
+            if (newCol >= 0 && newCol < 8 && newRow >= 0 && newRow < 8) {
+                attacks |= (1ULL << position(newCol, newRow));
+            }
+        }
+    }
+    
+    return attacks;
+}
+
+uint64_t Board::getPawnAttacks(uint64_t pawns, Color color) {
+    if (color == WHITE) {
+        return shiftUp(shiftRight(pawns)) | shiftUp(shiftLeft(pawns));
+    } else {
+        return shiftDown(shiftRight(pawns)) | shiftDown(shiftLeft(pawns));
+    }
+}
+
+// Get all squares attacked by a given color
+uint64_t Board::getAttackedSquares(Color color) const {
+    uint64_t attacks = 0;
+    uint64_t occupied = getAllPieces();
+    
+    // Pawn attacks
+    attacks |= getPawnAttacks(bitboards[color][PAWN], color);
+    
+    // Knight attacks
+    uint64_t knights = bitboards[color][KNIGHT];
+    while (knights) {
+        int sq = popLsb(knights);
+        attacks |= getKnightAttacks(sq);
+    }
+    
+    // Bishop attacks
+    uint64_t bishops = bitboards[color][BISHOP];
+    while (bishops) {
+        int sq = popLsb(bishops);
+        attacks |= getBishopAttacks(sq, occupied);
+    }
+    
+    // Rook attacks
+    uint64_t rooks = bitboards[color][ROOK];
+    while (rooks) {
+        int sq = popLsb(rooks);
+        attacks |= getRookAttacks(sq, occupied);
+    }
+    
+    // Queen attacks
+    uint64_t queens = bitboards[color][QUEEN];
+    while (queens) {
+        int sq = popLsb(queens);
+        attacks |= getQueenAttacks(sq, occupied);
+    }
+    
+    // King attacks
+    uint64_t king = bitboards[color][KING];
+    if (king) {
+        int sq = getLsb(king);
+        attacks |= getKingAttacks(sq);
+    }
+    
+    return attacks;
+}

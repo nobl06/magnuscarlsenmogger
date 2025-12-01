@@ -1,22 +1,15 @@
 #pragma once
 #include "../board.h"
+#include "defs.h"
 #include <cstdint>
 #include <utility>
 
 namespace PSQT {
 
-// Score type combining middle game and endgame evaluations
-struct Score {
-    int16_t mg = 0;
-    int16_t eg = 0;
-    
-    constexpr Score(int16_t middle, int16_t end) : mg(middle), eg(end) {}
-    constexpr Score() = default;
-};
+using Score = Eval::Score;
 
 // Piece-square table: [piece_type][color][square]
 extern Score psqTable[7][2][64];
-// Initialize the piece-square tables
 void init();
 
 // Get the piece-square bonus for a given piece, color, and square

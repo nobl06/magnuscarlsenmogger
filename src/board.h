@@ -54,6 +54,29 @@ class Board {
     // Helper to pop (extract and clear) least significant bit. Helps to not go through each square to find a specific piece
     static int popLsb(std::uint64_t &bb);
 
+    // Bitboard utility functions
+    static int popcount(uint64_t bb);
+    static bool moreThanOne(uint64_t bb);
+    static uint64_t shiftUp(uint64_t bb);
+    static uint64_t shiftDown(uint64_t bb);
+    static uint64_t shiftRight(uint64_t bb);
+    static uint64_t shiftLeft(uint64_t bb);
+    static uint64_t columnBB(int column);
+    static uint64_t rowBB(int row);
+    static uint64_t adjacentColumnsBB(int column);
+    
+    // Distance functions
+    static int distance(int sq1, int sq2);
+    static int columnDistance(int sq1, int sq2);
+    
+    // Attack generation
+    static uint64_t getKnightAttacks(int square);
+    static uint64_t getBishopAttacks(int square, uint64_t occupied);
+    static uint64_t getRookAttacks(int square, uint64_t occupied);
+    static uint64_t getQueenAttacks(int square, uint64_t occupied);
+    static uint64_t getKingAttacks(int square);
+    static uint64_t getPawnAttacks(uint64_t pawns, Color color);
+
     // bitboards[Color][PieceType]
     uint64_t bitboards[2][7];
 
@@ -68,4 +91,5 @@ class Board {
     // Attack and check detection
     bool isSquareAttackedBy(int square, Color attackerColor) const;
     bool isKingInCheck(Color kingColor) const;
+    uint64_t getAttackedSquares(Color color) const;
 };
