@@ -2,6 +2,7 @@
 #include "debugger.h"
 #include "move.h"
 #include "gen.hpp"
+#include "eval/psqt.h"
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -35,6 +36,9 @@ bool is_white(const std::vector<std::string>& move_hist) {
 }
 
 int main(int argc, char *argv[]) {
+    // Initialize piece-square tables
+    PSQT::init();
+    
     std::string inputfile;
     std::string outputfile;
 

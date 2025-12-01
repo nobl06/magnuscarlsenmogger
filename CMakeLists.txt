@@ -10,6 +10,7 @@ add_executable(MagnusCarlsenMogger
     src/board.cpp
     src/move.cpp
     src/gen.cpp
+    src/eval/psqt.cpp
 )
 
 # Perft test executable
@@ -18,6 +19,7 @@ add_executable(perft_test
     src/board.cpp
     src/move.cpp
     src/gen.cpp
+    src/eval/psqt.cpp
 )
 
 # Unit test executable
@@ -26,4 +28,5 @@ add_executable(unit_test
     src/board.cpp
     src/move.cpp
     src/gen.cpp
+    src/eval/psqt.cpp
 )
