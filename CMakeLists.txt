@@ -13,3 +13,19 @@ add_executable(MagnusCarlsenMogger
     src/evaluate.cpp
     src/piece_values.cpp
 )
+
+## Perft test executable
+#add_executable(perft_test
+#    test/perft.cpp
+#    src/board.cpp
+#    src/move.cpp
+#    src/gen.cpp
+#)
+#
+## Unit test executable
+#add_executable(unit_test
+#    test/unit_test.cpp
+#    src/board.cpp
+#    src/move.cpp
+#    src/gen.cpp
+#)
