@@ -21,7 +21,7 @@ void init();
 
 // Get the piece-square bonus for a given piece, color, and square
 inline Score getScore(PieceType piece, Color color, int square) {
-    return psqTable[static_cast<int>(piece)][static_cast<int>(color)][square];
+    return psqTable[piece][color][square];
 }
 
 // Evaluate all piece-square bonuses for the current board position

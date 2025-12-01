@@ -109,28 +109,28 @@ void init() {
         
         // store the positional bonus for each piece type
         Score pawnBonus = PawnBonus[row][column];
-        psqTable[static_cast<int>(PieceType::PAWN)][static_cast<int>(Color::WHITE)][square] = pawnBonus;
-        psqTable[static_cast<int>(PieceType::PAWN)][static_cast<int>(Color::BLACK)][flipRow(square)] = Score(-pawnBonus.mg, -pawnBonus.eg);
+        psqTable[PAWN][WHITE][square] = pawnBonus;
+        psqTable[PAWN][BLACK][flipRow(square)] = Score(-pawnBonus.mg, -pawnBonus.eg);
         
         Score knightBonus = KnightBonus[row][mirroredColumn];
-        psqTable[static_cast<int>(PieceType::KNIGHT)][static_cast<int>(Color::WHITE)][square] = knightBonus;
-        psqTable[static_cast<int>(PieceType::KNIGHT)][static_cast<int>(Color::BLACK)][flipRow(square)] = Score(-knightBonus.mg, -knightBonus.eg);
+        psqTable[KNIGHT][WHITE][square] = knightBonus;
+        psqTable[KNIGHT][BLACK][flipRow(square)] = Score(-knightBonus.mg, -knightBonus.eg);
         
         Score bishopBonus = BishopBonus[row][mirroredColumn];
-        psqTable[static_cast<int>(PieceType::BISHOP)][static_cast<int>(Color::WHITE)][square] = bishopBonus;
-        psqTable[static_cast<int>(PieceType::BISHOP)][static_cast<int>(Color::BLACK)][flipRow(square)] = Score(-bishopBonus.mg, -bishopBonus.eg);
+        psqTable[BISHOP][WHITE][square] = bishopBonus;
+        psqTable[BISHOP][BLACK][flipRow(square)] = Score(-bishopBonus.mg, -bishopBonus.eg);
         
         Score rookBonus = RookBonus[row][mirroredColumn];
-        psqTable[static_cast<int>(PieceType::ROOK)][static_cast<int>(Color::WHITE)][square] = rookBonus;
-        psqTable[static_cast<int>(PieceType::ROOK)][static_cast<int>(Color::BLACK)][flipRow(square)] = Score(-rookBonus.mg, -rookBonus.eg);
+        psqTable[ROOK][WHITE][square] = rookBonus;
+        psqTable[ROOK][BLACK][flipRow(square)] = Score(-rookBonus.mg, -rookBonus.eg);
         
         Score queenBonus = QueenBonus[row][mirroredColumn];
-        psqTable[static_cast<int>(PieceType::QUEEN)][static_cast<int>(Color::WHITE)][square] = queenBonus;
-        psqTable[static_cast<int>(PieceType::QUEEN)][static_cast<int>(Color::BLACK)][flipRow(square)] = Score(-queenBonus.mg, -queenBonus.eg);
+        psqTable[QUEEN][WHITE][square] = queenBonus;
+        psqTable[QUEEN][BLACK][flipRow(square)] = Score(-queenBonus.mg, -queenBonus.eg);
         
         Score kingBonus = KingBonus[row][mirroredColumn];
-        psqTable[static_cast<int>(PieceType::KING)][static_cast<int>(Color::WHITE)][square] = kingBonus;
-        psqTable[static_cast<int>(PieceType::KING)][static_cast<int>(Color::BLACK)][flipRow(square)] = Score(-kingBonus.mg, -kingBonus.eg);
+        psqTable[KING][WHITE][square] = kingBonus;
+        psqTable[KING][BLACK][flipRow(square)] = Score(-kingBonus.mg, -kingBonus.eg);
     }
 }
 
@@ -143,7 +143,7 @@ static void processPieces(uint64_t bitboard, PieceType pieceType, Color color,
         Score bonus = getScore(pieceType, color, square);
         
         // Add to score: we add the score for white and subtract the score for black
-        if (color == Color::WHITE) {
+        if (color == WHITE) {
             mgScore += bonus.mg;
             egScore += bonus.eg;
         } else {
@@ -158,21 +158,21 @@ std::pair<int, int> evaluatePSQT(const Board& board) {
     int mgScore = 0;
     int egScore = 0;
     
-    // Process all white pieces
-    processPieces(board.whitePawns, PieceType::PAWN, Color::WHITE, mgScore, egScore);
-    processPieces(board.whiteKnights, PieceType::KNIGHT, Color::WHITE, mgScore, egScore);
-    processPieces(board.whiteBishops, PieceType::BISHOP, Color::WHITE, mgScore, egScore);
-    processPieces(board.whiteRooks, PieceType::ROOK, Color::WHITE, mgScore, egScore);
-    processPieces(board.whiteQueens, PieceType::QUEEN, Color::WHITE, mgScore, egScore);
-    processPieces(board.whiteKing, PieceType::KING, Color::WHITE, mgScore, egScore);
+    // Process all white pieces (color = 0 = WHITE)
+    processPieces(board.bitboards[WHITE][PAWN], PAWN, WHITE, mgScore, egScore);
+    processPieces(board.bitboards[WHITE][KNIGHT], KNIGHT, WHITE, mgScore, egScore);
+    processPieces(board.bitboards[WHITE][BISHOP], BISHOP, WHITE, mgScore, egScore);
+    processPieces(board.bitboards[WHITE][ROOK], ROOK, WHITE, mgScore, egScore);
+    processPieces(board.bitboards[WHITE][QUEEN], QUEEN, WHITE, mgScore, egScore);
+    processPieces(board.bitboards[WHITE][KING], KING, WHITE, mgScore, egScore);
     
-    // Process all black pieces
-    processPieces(board.blackPawns, PieceType::PAWN, Color::BLACK, mgScore, egScore);
-    processPieces(board.blackKnights, PieceType::KNIGHT, Color::BLACK, mgScore, egScore);
-    processPieces(board.blackBishops, PieceType::BISHOP, Color::BLACK, mgScore, egScore);
-    processPieces(board.blackRooks, PieceType::ROOK, Color::BLACK, mgScore, egScore);
-    processPieces(board.blackQueens, PieceType::QUEEN, Color::BLACK, mgScore, egScore);
-    processPieces(board.blackKing, PieceType::KING, Color::BLACK, mgScore, egScore);
+    // Process all black pieces (color = 1 = BLACK)
+    processPieces(board.bitboards[BLACK][PAWN], PAWN, BLACK, mgScore, egScore);
+    processPieces(board.bitboards[BLACK][KNIGHT], KNIGHT, BLACK, mgScore, egScore);
+    processPieces(board.bitboards[BLACK][BISHOP], BISHOP, BLACK, mgScore, egScore);
+    processPieces(board.bitboards[BLACK][ROOK], ROOK, BLACK, mgScore, egScore);
+    processPieces(board.bitboards[BLACK][QUEEN], QUEEN, BLACK, mgScore, egScore);
+    processPieces(board.bitboards[BLACK][KING], KING, BLACK, mgScore, egScore);
     
     return {mgScore, egScore};
 }
