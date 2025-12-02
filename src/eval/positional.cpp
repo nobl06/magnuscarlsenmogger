@@ -292,9 +292,86 @@ std::pair<int, int> evaluatePawns(const Board& board) {
     return {mgScore, egScore};
 }
 
-// Final positional evaluation (currently only pawns)
+
+// ========================================
+// Mobility Evaluation
+// ========================================
+
+std::pair<int, int> evaluateMobility(const Board& board) {
+    int mgScore = 0;
+    int egScore = 0;
+    uint64_t occupied = board.getAllPieces();
+    
+    for (Color color : {WHITE, BLACK}) {
+        int sign = (color == WHITE) ? 1 : -1;
+        uint64_t ourPieces = (color == WHITE) ? board.getAllWhitePieces() : board.getAllBlackPieces();
+        
+        // Mobility area: not attacked by enemy pawns, not occupied by our pieces
+        uint64_t mobilityArea = ~(Board::getPawnAttacks(board.bitboards[1 - color][PAWN], (Color)(1 - color)))
+                                & ~ourPieces;
+        
+        // Knights
+        uint64_t knights = board.bitboards[color][KNIGHT];
+        while (knights) {
+            int sq = Board::popLsb(knights);
+            uint64_t attacks = Board::getKnightAttacks(sq);
+            int mobility = Board::popcount(attacks & mobilityArea);
+            mobility = std::min(mobility, 8);
+            mgScore += sign * MOBILITY_KNIGHT[mobility].mg;
+            egScore += sign * MOBILITY_KNIGHT[mobility].eg;
+        }
+        
+        // Bishops
+        uint64_t bishops = board.bitboards[color][BISHOP];
+        while (bishops) {
+            int sq = Board::popLsb(bishops);
+            uint64_t attacks = Board::getBishopAttacks(sq, occupied);
+            int mobility = Board::popcount(attacks & mobilityArea);
+            mobility = std::min(mobility, 13);
+            mgScore += sign * MOBILITY_BISHOP[mobility].mg;
+            egScore += sign * MOBILITY_BISHOP[mobility].eg;
+        }
+        
+        // Rooks
+        uint64_t rooks = board.bitboards[color][ROOK];
+        while (rooks) {
+            int sq = Board::popLsb(rooks);
+            uint64_t attacks = Board::getRookAttacks(sq, occupied);
+            int mobility = Board::popcount(attacks & mobilityArea);
+            mobility = std::min(mobility, 14);
+            mgScore += sign * MOBILITY_ROOK[mobility].mg;
+            egScore += sign * MOBILITY_ROOK[mobility].eg;
+        }
+        
+        // Queens
+        uint64_t queens = board.bitboards[color][QUEEN];
+        while (queens) {
+            int sq = Board::popLsb(queens);
+            uint64_t attacks = Board::getQueenAttacks(sq, occupied);
+            int mobility = Board::popcount(attacks & mobilityArea);
+            mobility = std::min(mobility, 27);
+            mgScore += sign * MOBILITY_QUEEN[mobility].mg;
+            egScore += sign * MOBILITY_QUEEN[mobility].eg;
+        }
+    }
+    
+    return {mgScore, egScore};
+}
+
+
+
+// ========================================
+// Final Evaluation Function
+// ========================================
+
 std::pair<int, int> evaluatePositional(const Board& board) {
-    return evaluatePawns(board);
+    auto [pawnMg, pawnEg] = evaluatePawns(board);
+    auto [mobilityMg, mobilityEg] = evaluateMobility(board);
+    
+    int mgTotal = pawnMg + mobilityMg;
+    int egTotal = pawnEg + mobilityEg;
+    
+    return {mgTotal, egTotal};
 }
 
 }
