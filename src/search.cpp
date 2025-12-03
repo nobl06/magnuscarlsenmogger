@@ -36,7 +36,7 @@ namespace Search {
             }
         }
         
-        // Step 3.5: Alpha-beta loop
+        // alpha-beta loop
         int bestScore = -INFINITY_SCORE;
         
         for (const Move& move : legalMoves) {
@@ -54,15 +54,16 @@ namespace Search {
             if (score > bestScore) {
                 bestScore = score;
             }
-            // if we improved our guaranteed minimum
-            // update alpha
+            
+            // beta cutoff - check first for efficiency
+            // If score >= beta, opponent won't allow this line
+            if (score >= beta) {
+                return beta;  // fail-high cutoff
+            }
+            
+            // update alpha - only if we didn't cut off
             if (score > alpha) {
                 alpha = score;
-            }
-            // our minimum is >= opponent's maximum, opponent won't allow this
-            // beta cutoff and we return (stop searching)
-            if (alpha >= beta) {
-                return beta;  // Fail-high cutoff
             }
         }
         
