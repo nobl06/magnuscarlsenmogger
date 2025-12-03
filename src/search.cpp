@@ -12,7 +12,7 @@ namespace Search {
     }
     
     //alpha-beta search
-    int alphaBeta(const Board& board, int depth, int alpha, int beta, int ply) {
+    int alphaBeta(Board& board, int depth, int alpha, int beta, int ply) {
         stats.nodes++;
         
         //terminal node -  return evaluation
@@ -40,14 +40,14 @@ namespace Search {
         int bestScore = -INFINITY_SCORE;
         
         for (const Move& move : legalMoves) {
-            // Copying board method which is slow (to be changed to make/unmake method later)
-            Board newBoard = board;
-            newBoard.update_move(move);
-            // flip side to move
-            newBoard.sideToMove = (newBoard.sideToMove == WHITE) ? BLACK : WHITE;
+            // make/unmake method (efficient - no board copying)
+            BoardState state = board.makeMove(move);
             
             // recursive call with negated window
-            int score = -alphaBeta(newBoard, depth - 1, -beta, -alpha, ply + 1);
+            int score = -alphaBeta(board, depth - 1, -beta, -alpha, ply + 1);
+            
+            // unmake the move to restore board state
+            board.unmakeMove(move, state);
             
             // if this move is better than any seen so far
             // update best score
@@ -71,7 +71,7 @@ namespace Search {
     }
     
     // main search function
-    Move findBestMove(const Board& board, int depth) {
+    Move findBestMove(Board& board, int depth) {
         stats.reset();
         info.reset();
         info.maxDepth = depth;
@@ -92,12 +92,13 @@ namespace Search {
         
         // search each root move
         for (const Move& move : legalMoves) {
-            Board newBoard = board;
-            newBoard.update_move(move);
-            // flip side to move
-            newBoard.sideToMove = (newBoard.sideToMove == WHITE) ? BLACK : WHITE;
+            // make/unmake method (efficient - no board copying)
+            BoardState state = board.makeMove(move);
             
-            int score = -alphaBeta(newBoard, depth - 1, -beta, -alpha, 1);
+            int score = -alphaBeta(board, depth - 1, -beta, -alpha, 1);
+            
+            // unmake the move to restore board state
+            board.unmakeMove(move, state);
             
             if (score > bestScore) {
                 bestScore = score;

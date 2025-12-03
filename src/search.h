@@ -43,10 +43,10 @@ namespace Search {
     };
     
     // Main search entry point
-    Move findBestMove(const Board& board, int depth);
+    Move findBestMove(Board& board, int depth);
     
     // Internal alpha-beta function
-    int alphaBeta(const Board& board, int depth, int alpha, int beta, int ply);
+    int alphaBeta(Board& board, int depth, int alpha, int beta, int ply);
     
     // Helper function
     int getMateScore(int ply);

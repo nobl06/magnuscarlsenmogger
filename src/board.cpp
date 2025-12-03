@@ -252,6 +252,181 @@ void Board::update_move(Move m) {
     sideToMove = (sideToMove == Color::WHITE) ? Color::BLACK : Color::WHITE;
 }
 
+BoardState Board::makeMove(const Move& m) {
+    // Save state for unmake
+    BoardState state;
+    state.capturedPiece = pieceAt(m.to);
+    state.capturedColor = colorAt(m.to);
+    state.enPassantTarget = enPassantTarget;
+    state.whiteCanKingside = whiteCanKingside;
+    state.whiteCanQueenside = whiteCanQueenside;
+    state.blackCanKingside = blackCanKingside;
+    state.blackCanQueenside = blackCanQueenside;
+    
+    // get move info
+    PieceType fpt = pieceAt(m.from);
+    Color fc = colorAt(m.from);
+    PieceType finaltype = (m.promotion != PieceType::EMPTY) ? m.promotion : fpt;
+    
+    std::uint64_t maskFrom = 1ULL << m.from;
+    std::uint64_t maskTo = 1ULL << m.to;
+    
+    // Clear en passant target
+    int oldEnPassant = enPassantTarget;
+    enPassantTarget = -1;
+    
+    // Handle castling move (king moving 2 squares)
+    if (fpt == PieceType::KING && std::abs(m.to - m.from) == 2) {
+        int row = Board::row(m.from);
+        int fromCol = Board::column(m.from);
+        int toCol = Board::column(m.to);
+        
+        // kingside castling
+        if (toCol > fromCol) {
+            int rookFrom = position(7, row);
+            int rookTo = position(5, row);
+            std::uint64_t rookMaskFrom = 1ULL << rookFrom;
+            std::uint64_t rookMaskTo = 1ULL << rookTo;
+            
+            bitboards[fc][ROOK] &= ~rookMaskFrom;
+            bitboards[fc][ROOK] |= rookMaskTo;
+        }
+        // queenside castling
+        else {
+            int rookFrom = position(0, row);
+            int rookTo = position(3, row);
+            std::uint64_t rookMaskFrom = 1ULL << rookFrom;
+            std::uint64_t rookMaskTo = 1ULL << rookTo;
+            
+            bitboards[fc][ROOK] &= ~rookMaskFrom;
+            bitboards[fc][ROOK] |= rookMaskTo;
+        }
+    }
+    
+    // en passant capture
+    if (fpt == PieceType::PAWN && m.to == oldEnPassant) {
+        int capturedPawnSquare = m.to + (fc == Color::WHITE ? -8 : 8);
+        std::uint64_t capturedMask = 1ULL << capturedPawnSquare;
+        bitboards[fc == WHITE ? BLACK : WHITE][PAWN] &= ~capturedMask;
+    }
+    
+    // set en passant target if pawn moved 2 squares
+    if (fpt == PieceType::PAWN && std::abs(static_cast<int>(m.to) - static_cast<int>(m.from)) == 16) {
+        enPassantTarget = m.from + (fc == Color::WHITE ? 8 : -8);
+    }
+    
+    // remove piece at destination (capture)
+    for (int c = 0; c < 2; ++c)
+        for (int pt = PAWN; pt <= KING; ++pt)
+            bitboards[c][pt] &= ~maskTo;
+    
+    // remove piece from source
+    bitboards[fc][fpt] &= ~maskFrom;
+    
+    //place piece at destination
+    bitboards[fc][finaltype] |= maskTo;
+    
+    // update castling rights
+    if (fpt == PieceType::KING) {
+        if (fc == Color::WHITE) {
+            whiteCanKingside = false;
+            whiteCanQueenside = false;
+        } else {
+            blackCanKingside = false;
+            blackCanQueenside = false;
+        }
+    }
+    
+    // if rook moves from starting position
+    if (fpt == PieceType::ROOK) {
+        if (fc == Color::WHITE) {
+            if (m.from == position(0, 0)) whiteCanQueenside = false;
+            if (m.from == position(7, 0)) whiteCanKingside = false;
+        } else {
+            if (m.from == position(0, 7)) blackCanQueenside = false;
+            if (m.from == position(7, 7)) blackCanKingside = false;
+        }
+    }
+    
+    // if rook is captured on starting square
+    if (state.capturedPiece == PieceType::ROOK) {
+        if (m.to == position(0, 0)) whiteCanQueenside = false;
+        if (m.to == position(7, 0)) whiteCanKingside = false;
+        if (m.to == position(0, 7)) blackCanQueenside = false;
+        if (m.to == position(7, 7)) blackCanKingside = false;
+    }
+    
+    // toggle side to move
+    sideToMove = (sideToMove == Color::WHITE) ? Color::BLACK : Color::WHITE;
+    
+    return state;
+}
+
+void Board::unmakeMove(const Move& m, const BoardState& state) {
+    // toggle side to move back
+    sideToMove = (sideToMove == Color::WHITE) ? Color::BLACK : Color::WHITE;
+    
+    Color fc = sideToMove;  // now it's back to the original side
+    PieceType fpt = pieceAt(m.to);  // the piece is now at 'to'
+    PieceType originalPiece = (m.promotion != PieceType::EMPTY) ? PAWN : fpt;
+    
+    std::uint64_t maskFrom = 1ULL << m.from;
+    std::uint64_t maskTo = 1ULL << m.to;
+    
+    // undo castling rook move
+    if (originalPiece == PieceType::KING && std::abs(m.to - m.from) == 2) {
+        int row = Board::row(m.from);
+        int fromCol = Board::column(m.from);
+        int toCol = Board::column(m.to);
+        
+        // kingside castling
+        if (toCol > fromCol) {
+            int rookFrom = position(7, row);
+            int rookTo = position(5, row);
+            std::uint64_t rookMaskFrom = 1ULL << rookFrom;
+            std::uint64_t rookMaskTo = 1ULL << rookTo;
+            
+            bitboards[fc][ROOK] &= ~rookMaskTo;
+            bitboards[fc][ROOK] |= rookMaskFrom;
+        }
+        // queenside castling
+        else {
+            int rookFrom = position(0, row);
+            int rookTo = position(3, row);
+            std::uint64_t rookMaskFrom = 1ULL << rookFrom;
+            std::uint64_t rookMaskTo = 1ULL << rookTo;
+            
+            bitboards[fc][ROOK] &= ~rookMaskTo;
+            bitboards[fc][ROOK] |= rookMaskFrom;
+        }
+    }
+    
+    // undo en passant capture
+    if (originalPiece == PieceType::PAWN && m.to == state.enPassantTarget) {
+        int capturedPawnSquare = m.to + (fc == Color::WHITE ? -8 : 8);
+        std::uint64_t capturedMask = 1ULL << capturedPawnSquare;
+        bitboards[fc == WHITE ? BLACK : WHITE][PAWN] |= capturedMask;
+    }
+    
+    // remove piece from destination
+    bitboards[fc][fpt] &= ~maskTo;
+    
+    // restore piece at source
+    bitboards[fc][originalPiece] |= maskFrom;
+    
+    // restore captured piece
+    if (state.capturedPiece != PieceType::EMPTY) {
+        bitboards[state.capturedColor][state.capturedPiece] |= maskTo;
+    }
+    
+    // restore state
+    enPassantTarget = state.enPassantTarget;
+    whiteCanKingside = state.whiteCanKingside;
+    whiteCanQueenside = state.whiteCanQueenside;
+    blackCanKingside = state.blackCanKingside;
+    blackCanQueenside = state.blackCanQueenside;
+}
+
 std::uint64_t Board::getAllWhitePieces() const {
     uint64_t bb = 0ULL;
     for (int pt = PAWN; pt <= KING; ++pt)

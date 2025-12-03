@@ -23,6 +23,17 @@ enum Color : uint8_t {
 // Forward declare Move
 struct Move;
 
+// state to save/restore when making/unmaking moves
+struct BoardState {
+    PieceType capturedPiece;
+    Color capturedColor;
+    int enPassantTarget;
+    bool whiteCanKingside;
+    bool whiteCanQueenside;
+    bool blackCanKingside;
+    bool blackCanQueenside;
+};
+
 class Board {
   public:
     void clear();
@@ -32,6 +43,10 @@ class Board {
     Color colorAt(int square) const;
     void update_move(Move m);
     void gamestate(const std::vector<std::string> &move_hist);
+    
+    // make/unmake functions
+    BoardState makeMove(const Move& m);
+    void unmakeMove(const Move& m, const BoardState& state);
 
     static constexpr int position(int column, int row) { return row * 8 + column; }
     static constexpr int column(int position) { return position % 8; }
