@@ -10,6 +10,7 @@ add_executable(MagnusCarlsenMogger
     src/board.cpp
     src/move.cpp
     src/gen.cpp
+    src/search.cpp
     src/eval/evaluate.cpp
     src/eval/psqt.cpp
     src/eval/material.cpp

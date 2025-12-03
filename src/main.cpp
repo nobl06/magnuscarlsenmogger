@@ -4,6 +4,7 @@
 #include "gen.hpp"
 #include "move.h"
 #include "eval/psqt.h"
+#include "search.h"
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -65,16 +66,16 @@ int main(int argc, char *argv[]) {
     board.gamestate(move_hist);
     board.print();
 
-    // Printing evaluation of position
+    // printing evaluation of position
     std::cout << "Evaluation = " << Evaluation::evaluate(board) << "\n";
 
-    // Generate moves for the side to move
-    MoveGenerator generator(board, board.sideToMove);
-    std::vector<Move> pseudoLegalMoves = generator.generatePseudoLegalMoves();
-    std::vector<Move> legalMoves = generator.filterLegalMoves(pseudoLegalMoves);
-
-    // Choose a move
-    Move chosenMove = chooseMove(legalMoves);
+    // search for best move
+    const int SEARCH_DEPTH = 5;
+    Move chosenMove = Search::findBestMove(board, SEARCH_DEPTH);
+    
+    std::cout << "Search depth: " << SEARCH_DEPTH << "\n";
+    std::cout << "Nodes searched: " << Search::stats.nodes << "\n";
+    std::cout << "Best move: " << chosenMove.toString() << "\n";
 
     write_out(outputfile, chosenMove.toString());
 
@@ -82,3 +83,5 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
+
+//
