@@ -294,6 +294,16 @@ int Board::getLsb(std::uint64_t bb) {
     return count;
 }
 
+int Board::getMsb(std::uint64_t bb) {
+    // Find most significant bit
+    if (bb == 0) return -1;
+    int msb = 0;
+    while (bb >>= 1) {
+        msb++;
+    }
+    return msb;
+}
+
 int Board::popLsb(std::uint64_t &bb) {
     int pos = getLsb(bb);
     bb &= bb - 1; // Clear the least significant bit
@@ -617,4 +627,30 @@ uint64_t Board::getAttackedSquares(Color color) const {
     }
     
     return attacks;
+}
+
+// Get forward rows from a given square (from color's perspective)
+uint64_t Board::forwardRowsBB(Color color, int square) {
+    int row = Board::row(square);
+    if (color == WHITE) {
+        // For White, forward is toward row 7
+        uint64_t forwardRows = 0ULL;
+        for (int r = row + 1; r <= 7; ++r) {
+            forwardRows |= Board::rowBB(r);
+        }
+        return forwardRows;
+    } else {
+        // For Black, forward is toward row 0
+        uint64_t forwardRows = 0ULL;
+        for (int r = 0; r < row; ++r) {
+            forwardRows |= Board::rowBB(r);
+        }
+        return forwardRows;
+    }
+}
+
+// Check if a color has no pawns on a given column (semi-open file)
+bool Board::isOnSemiOpenFile(const Board& board, Color color, int column) {
+    uint64_t pawns = board.bitboards[color][PAWN];
+    return (pawns & Board::columnBB(column)) == 0;
 }

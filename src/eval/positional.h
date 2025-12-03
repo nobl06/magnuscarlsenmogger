@@ -14,6 +14,7 @@ std::pair<int, int> evaluatePositional(const Board& board);
 // Sub-evaluation functions
 std::pair<int, int> evaluatePawns(const Board& board);
 std::pair<int, int> evaluateMobility(const Board& board);
+std::pair<int, int> evaluateKingSafety(const Board& board);
 
 // Helper functions for attack maps
 uint64_t getKingZone(int kingSq, Color color);
