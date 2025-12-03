@@ -1,6 +1,6 @@
 #include "board.h"
 #include "debugger.h"
-#include "evaluate.h"
+#include "eval/evaluate.h"
 #include "gen.hpp"
 #include "move.h"
 #include "eval/psqt.h"
@@ -66,7 +66,7 @@ int main(int argc, char *argv[]) {
     board.print();
 
     // Printing evaluation of position
-    std::cout << "Evaluation = " << evaluate(board, board.sideToMove) << "\n";
+    std::cout << "Evaluation = " << Evaluation::evaluate(board) << "\n";
 
     // Generate moves for the side to move
     MoveGenerator generator(board, board.sideToMove);
