@@ -54,6 +54,34 @@ constexpr int SAFE_CHECK[7][2] = {
     {0, 0}, {0, 0}, {805, 1292}, {650, 984}, {1071, 1886}, {730, 1128}, {0, 0}
 };
 
+// Pawn shelter strength by [distance_from_edge][row]
+constexpr int SHELTER_STRENGTH[4][8] = {
+    { -2, 85, 95, 53, 39, 23, 25, 0 },      // a/h files (edge)
+    { -55, 64, 32, -55, -30, -11, -61, 0 }, // b/g files
+    { -11, 75, 19, -6, 26, 9, -47, 0 },     // c/f files
+    { -41, -11, -27, -58, -42, -66, -163, 0 } // d/e files (center)
+};
+
+// Enemy pawn storm penalty by [distance_from_edge][row]
+constexpr int UNBLOCKED_STORM[4][8] = {
+    { 94, -280, -170, 90, 59, 47, 53, 0 },
+    { 43, -17, 128, 39, 26, -17, 15, 0 },
+    { -9, 62, 170, 34, -5, -20, -11, 0 },
+    { -27, -19, 106, 10, 2, -13, -24, 0 }
+};
+
+// Blocked storm penalty by [row] - when our pawn blocks enemy pawn
+constexpr Score BLOCKED_STORM[8] = {
+    Score(0, 0), Score(0, 0), Score(64, 75), Score(-3, 14),
+    Score(-12, 19), Score(-7, 4), Score(-10, 5), Score(0, 0)
+};
+
+// King on file penalty [semi-open for us][semi-open for them]
+constexpr Score KING_ON_FILE[2][2] = {
+    { Score(-18, 11), Score(-6, -3) },
+    { Score(0, 0), Score(5, -4) }
+};
+
 // Piece bonuses
 constexpr Score ROOK_ON_OPEN_FILE = Score(49, 26);
 constexpr Score ROOK_ON_SEMIOPEN_FILE = Score(18, 8);
@@ -92,6 +120,7 @@ uint64_t getKingZone(int kingSq, Color color) {
     uint64_t zone = Board::getKingAttacks(kingSq) | (1ULL << kingSq);
     return zone;
 }
+
 
 // Pawn Structure Evaluation
 
@@ -358,6 +387,227 @@ std::pair<int, int> evaluateMobility(const Board& board) {
     return {mgScore, egScore};
 }
 
+// ========================================
+// King Safety Evaluation
+// ========================================
+
+std::pair<int, int> evaluateKingSafety(const Board& board) {
+    int mgScore = 0;
+    int egScore = 0;
+    
+    for (Color color : {WHITE, BLACK}) {
+        int sign = (color == WHITE) ? 1 : -1;
+        Color enemy = (Color)(1 - color);
+        
+        uint64_t king = board.bitboards[color][KING];
+        if (!king) continue;
+        
+        int kingSq = Board::getLsb(king);
+        uint64_t kingZone = getKingZone(kingSq, color);
+        
+        uint64_t enemyAttacks = board.getAttackedSquares(enemy);
+        uint64_t attackedKingZone = kingZone & enemyAttacks;
+        
+        int kingDanger = 0;
+        
+        int attackerCount = 0;
+        int attackerWeight = 0;
+        
+        uint64_t occupied = board.getAllPieces();
+        
+        // Check for potential attacks by enemy pieces
+        uint64_t knights = board.bitboards[enemy][KNIGHT];
+        uint64_t knightsCopy = knights;
+        while (knightsCopy) {
+            int sq = Board::popLsb(knightsCopy);
+            if (Board::getKnightAttacks(sq) & kingZone) {
+                attackerCount++;
+                attackerWeight += KING_ATTACK_WEIGHTS[KNIGHT];
+            }
+        }
+        
+        uint64_t bishops = board.bitboards[enemy][BISHOP];
+        uint64_t bishopsCopy = bishops;
+        while (bishopsCopy) {
+            int sq = Board::popLsb(bishopsCopy);
+            if (Board::getBishopAttacks(sq, occupied) & kingZone) {
+                attackerCount++;
+                attackerWeight += KING_ATTACK_WEIGHTS[BISHOP];
+            }
+        }
+        
+        uint64_t rooks = board.bitboards[enemy][ROOK];
+        uint64_t rooksCopy = rooks;
+        while (rooksCopy) {
+            int sq = Board::popLsb(rooksCopy);
+            if (Board::getRookAttacks(sq, occupied) & kingZone) {
+                attackerCount++;
+                attackerWeight += KING_ATTACK_WEIGHTS[ROOK];
+            }
+        }
+        
+        uint64_t queens = board.bitboards[enemy][QUEEN];
+        uint64_t queensCopy = queens;
+        while (queensCopy) {
+            int sq = Board::popLsb(queensCopy);
+            if (Board::getQueenAttacks(sq, occupied) & kingZone) {
+                attackerCount++;
+                attackerWeight += KING_ATTACK_WEIGHTS[QUEEN];
+            }
+        }
+        
+        // Safe checks score if enemy can check and checking square is safe
+        uint64_t ourDefense = board.getAttackedSquares(color);
+        int safeCheckBonus = 0;
+        
+        //Check safe checks for all pieces types
+        uint64_t knightCheckSquares = Board::getKnightAttacks(kingSq);
+        uint64_t safeKnightChecks = knightCheckSquares & knights & ~ourDefense;
+        if (safeKnightChecks) {
+            bool multiple = Board::moreThanOne(safeKnightChecks);
+            safeCheckBonus += SAFE_CHECK[KNIGHT][multiple ? 1 : 0];
+        }
+        
+        uint64_t bishopCheckSquares = Board::getBishopAttacks(kingSq, occupied);
+        uint64_t safeBishopChecks = bishopCheckSquares & bishops & ~ourDefense;
+        if (safeBishopChecks) {
+            bool multiple = Board::moreThanOne(safeBishopChecks);
+            safeCheckBonus += SAFE_CHECK[BISHOP][multiple ? 1 : 0];
+        }
+        
+        uint64_t rookCheckSquares = Board::getRookAttacks(kingSq, occupied);
+        uint64_t safeRookChecks = rookCheckSquares & rooks & ~ourDefense;
+        if (safeRookChecks) {
+            bool multiple = Board::moreThanOne(safeRookChecks);
+            safeCheckBonus += SAFE_CHECK[ROOK][multiple ? 1 : 0];
+        }
+        
+        uint64_t queenCheckSquares = Board::getQueenAttacks(kingSq, occupied);
+        uint64_t safeQueenChecks = queenCheckSquares & queens & ~ourDefense;
+        if (safeQueenChecks) {
+            bool multiple = Board::moreThanOne(safeQueenChecks);
+            safeCheckBonus += SAFE_CHECK[QUEEN][multiple ? 1 : 0];
+        }
+        
+        //Count enemy attacks on squares directly adjacent to king
+        uint64_t kingAdjacent = Board::getKingAttacks(kingSq);
+        int kingAttacksCount = Board::popcount(kingAdjacent & enemyAttacks);
+        
+        int defensiveBonus = 0;
+        
+        // No queen bonus
+        if (board.bitboards[enemy][QUEEN] == 0) {
+            defensiveBonus += 873;
+        }
+        
+        // Knight+King defense: our knight and king defending same squares
+        uint64_t ourKnights = board.bitboards[color][KNIGHT];
+        uint64_t ourKnightAttacks = 0;
+        uint64_t ourKnightsCopy = ourKnights;
+        while (ourKnightsCopy) {
+            int sq = Board::popLsb(ourKnightsCopy);
+            ourKnightAttacks |= Board::getKnightAttacks(sq);
+        }
+        uint64_t ourKingAttacks = Board::getKingAttacks(kingSq);
+        if (ourKnightAttacks & ourKingAttacks) {
+            defensiveBonus += 100;
+        }
+        
+        // King danger score
+        if (attackerCount > 0) {
+            kingDanger = attackerCount * attackerWeight;
+            kingDanger += 183 * Board::popcount(attackedKingZone);
+            kingDanger += safeCheckBonus;
+            kingDanger += 69 * kingAttacksCount;
+            kingDanger += 37;
+            kingDanger -= defensiveBonus;
+            
+            // Scale danger
+            if (kingDanger > 100) {
+                int dangerMg = kingDanger * kingDanger / 4096;
+                int dangerEg = kingDanger / 16;
+                mgScore -= sign * dangerMg;
+                egScore -= sign * dangerEg;
+            }
+        }
+        
+        // Pawn shelter and storm evaluation
+        int kColumn = Board::column(kingSq);
+        
+        int shelterMg = 5;
+        int shelterEg = 5;
+        
+        // Only consider pawns that are relevant (at or in front of my king)
+        uint64_t relevantPawns = board.bitboards[color][PAWN] | board.bitboards[enemy][PAWN];
+        relevantPawns &= ~Board::forwardRowsBB(enemy, kingSq);
+        
+        uint64_t ourPawns = relevantPawns & board.bitboards[color][PAWN];
+        uint64_t enemyPawns = relevantPawns & board.bitboards[enemy][PAWN];
+        
+        // Filter our pawns: exclude those attacked by enemy pawns
+        uint64_t enemyPawnAttacks = Board::getPawnAttacks(board.bitboards[enemy][PAWN], enemy);
+        ourPawns &= ~enemyPawnAttacks;
+        
+        // Center file
+        int centerColumn = std::max(1, std::min(6, kColumn));
+        
+        // Check the 3 columns around the center
+        for (int column = centerColumn - 1; column <= centerColumn + 1; ++column) {
+            int edgeDist = std::min(column, 7 - column);
+            
+            // Find our pawn on this file
+            uint64_t ourColumnPawns = ourPawns & Board::columnBB(column);
+            int ourRow = 0;
+            if (ourColumnPawns) {
+                // Get closest pawn to king
+                int pawnSq = color == WHITE ? Board::getLsb(ourColumnPawns) : Board::getMsb(ourColumnPawns);
+                ourRow = relativeRow(color, pawnSq);
+                
+                // Only count if pawn is in front of king
+                int kingRelRow = relativeRow(color, kingSq);
+                if (ourRow <= kingRelRow) {
+                    ourRow = 0;
+                }
+            }
+            
+            // Find enemy pawn on this file
+            uint64_t enemyColumnPawns = enemyPawns & Board::columnBB(column);
+            int enemyRow = 0;
+            if (enemyColumnPawns) {
+                // Get enemy pawn most advanced toward us
+                int pawnSq = enemy == WHITE ? Board::getMsb(enemyColumnPawns) : Board::getLsb(enemyColumnPawns);
+                enemyRow = relativeRow(enemy, pawnSq);
+            }
+            
+            shelterMg += SHELTER_STRENGTH[edgeDist][ourRow];
+            
+            // Apply storm penalty
+            if (ourRow && (ourRow == enemyRow - 1)) {
+                // Our pawn and enemy pawn are face-to-face (Blocked Storm)
+                shelterMg -= BLOCKED_STORM[enemyRow].mg;
+                shelterEg -= BLOCKED_STORM[enemyRow].eg;
+            } else {
+                // Unblocked storm
+                shelterMg -= UNBLOCKED_STORM[edgeDist][enemyRow];
+            }
+        }
+        
+        // King on file penalty
+        bool ourSemiOpen = Board::isOnSemiOpenFile(board, color, kColumn);
+        bool enemySemiOpen = Board::isOnSemiOpenFile(board, enemy, kColumn);
+        shelterMg -= KING_ON_FILE[ourSemiOpen][enemySemiOpen].mg;
+        shelterEg -= KING_ON_FILE[ourSemiOpen][enemySemiOpen].eg;
+        
+        mgScore += sign * shelterMg;
+        egScore += sign * shelterEg;
+    }
+    
+    return {mgScore, egScore};
+}
+
+
+
+
 
 
 // ========================================
@@ -367,9 +617,10 @@ std::pair<int, int> evaluateMobility(const Board& board) {
 std::pair<int, int> evaluatePositional(const Board& board) {
     auto [pawnMg, pawnEg] = evaluatePawns(board);
     auto [mobilityMg, mobilityEg] = evaluateMobility(board);
-    
-    int mgTotal = pawnMg + mobilityMg;
-    int egTotal = pawnEg + mobilityEg;
+    auto [kingSafetyMg, kingSafetyEg] = evaluateKingSafety(board);
+
+    int mgTotal = pawnMg + mobilityMg + kingSafetyMg;
+    int egTotal = pawnEg + mobilityEg + kingSafetyEg;
     
     return {mgTotal, egTotal};
 }

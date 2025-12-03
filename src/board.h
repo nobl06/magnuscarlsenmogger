@@ -51,6 +51,8 @@ class Board {
 
     // Helper to get least significant bit position
     static int getLsb(std::uint64_t bb);
+    // Helper to get most significant bit position
+    static int getMsb(std::uint64_t bb);
     // Helper to pop (extract and clear) least significant bit. Helps to not go through each square to find a specific piece
     static int popLsb(std::uint64_t &bb);
 
@@ -76,6 +78,10 @@ class Board {
     static uint64_t getQueenAttacks(int square, uint64_t occupied);
     static uint64_t getKingAttacks(int square);
     static uint64_t getPawnAttacks(uint64_t pawns, Color color);
+    
+    // Board utilities
+    static uint64_t forwardRowsBB(Color color, int square);
+    static bool isOnSemiOpenFile(const Board& board, Color color, int column);
 
     // bitboards[Color][PieceType]
     uint64_t bitboards[2][7];
