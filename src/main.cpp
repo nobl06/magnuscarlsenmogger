@@ -1,10 +1,11 @@
 #include "board.h"
 #include "debugger.h"
 #include "eval/evaluate.h"
+#include "eval/psqt.h"
 #include "gen.hpp"
 #include "move.h"
-#include "eval/psqt.h"
 #include "search.h"
+#include <chrono>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -38,9 +39,12 @@ bool is_white(const std::vector<std::string> &move_hist) {
 }
 
 int main(int argc, char *argv[]) {
+    // Start timer
+    auto total_start = std::chrono::steady_clock::now();
+
     // Initialize piece-square tables
     PSQT::init();
-    
+
     std::string inputfile;
     std::string outputfile;
 
@@ -69,13 +73,24 @@ int main(int argc, char *argv[]) {
     // printing evaluation of position
     std::cout << "Evaluation = " << Evaluation::evaluate(board) << "\n";
 
+    auto search_start = std::chrono::steady_clock::now();
     // search for best move
     const int SEARCH_DEPTH = 5;
     Move chosenMove = Search::findBestMove(board, SEARCH_DEPTH);
-    
+
+    auto total_end = std::chrono::steady_clock::now();
+    auto total_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        total_end - total_start)
+                        .count();
+    auto search_total_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                               total_end - search_start)
+                               .count();
+
     std::cout << "Search depth: " << SEARCH_DEPTH << "\n";
     std::cout << "Nodes searched: " << Search::stats.nodes << "\n";
     std::cout << "Best move: " << chosenMove.toString() << "\n";
+    std::cout << "Search time: " << search_total_ms << " ms\n";
+    std::cout << "Total time: " << total_ms << " ms\n";
 
     write_out(outputfile, chosenMove.toString());
 
