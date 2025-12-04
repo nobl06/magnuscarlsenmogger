@@ -73,23 +73,18 @@ int main(int argc, char *argv[]) {
     // printing evaluation of position
     std::cout << "Evaluation = " << Evaluation::evaluate(board) << "\n";
 
-    auto search_start = std::chrono::steady_clock::now();
     // search for best move
-    const int SEARCH_DEPTH = 5;
-    Move chosenMove = Search::findBestMove(board, SEARCH_DEPTH);
+    const int MAXDEPTH = 64;
+    Move chosenMove = Search::findBestMove(board, MAXDEPTH);
 
     auto total_end = std::chrono::steady_clock::now();
     auto total_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
                         total_end - total_start)
                         .count();
-    auto search_total_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                               total_end - search_start)
-                               .count();
 
-    std::cout << "Search depth: " << SEARCH_DEPTH << "\n";
+    std::cout << "Search depth: " << Search::stats.depthReached << "\n";
     std::cout << "Nodes searched: " << Search::stats.nodes << "\n";
     std::cout << "Best move: " << chosenMove.toString() << "\n";
-    std::cout << "Search time: " << search_total_ms << " ms\n";
     std::cout << "Total time: " << total_ms << " ms\n";
 
     write_out(outputfile, chosenMove.toString());

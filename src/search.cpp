@@ -1,8 +1,9 @@
 #include "search.h"
 #include "eval/evaluate.h"
-#include <algorithm>
 #include "gen.hpp"
+#include <algorithm>
 #include <chrono>
+#include <iostream>
 
 std::chrono::steady_clock::time_point start_time; // Initialize timer
 int time_limit_ms = 9000;                         // 9 seconds
@@ -24,6 +25,7 @@ int getMateScore(int ply) {
 
 // alpha-beta search
 int alphaBeta(Board &board, int depth, int alpha, int beta, int ply) {
+    if (out_of_time()) return alpha; // We return immediately when out of time
     stats.nodes++;
 
     // terminal node -  return evaluation
@@ -51,6 +53,8 @@ int alphaBeta(Board &board, int depth, int alpha, int beta, int ply) {
     int bestScore = -INFINITY_SCORE;
 
     for (const Move &move : legalMoves) {
+        if (out_of_time()) break;
+
         // make/unmake method (efficient - no board copying)
         BoardState state = board.makeMove(move);
 
@@ -59,6 +63,8 @@ int alphaBeta(Board &board, int depth, int alpha, int beta, int ply) {
 
         // unmake the move to restore board state
         board.unmakeMove(move, state);
+
+        if (out_of_time()) break;
 
         // if this move is better than any seen so far
         // update best score
@@ -87,6 +93,9 @@ Move findBestMove(Board &board, int depth) {
     info.reset();
     info.maxDepth = depth;
 
+    start_time = std::chrono::steady_clock::now();
+    time_limit_ms = 9000; // 9 seconds
+
     // generate root moves
     MoveGenerator gen(board, board.sideToMove);
     std::vector<Move> pseudoLegal = gen.generatePseudoLegalMoves();
@@ -98,30 +107,52 @@ Move findBestMove(Board &board, int depth) {
 
     Move bestMove = legalMoves[0];
     int bestScore = -INFINITY_SCORE;
-    int alpha = -INFINITY_SCORE;
-    int beta = INFINITY_SCORE;
 
-    // search each root move
-    for (const Move &move : legalMoves) {
-        // make/unmake method (efficient - no board copying)
-        BoardState state = board.makeMove(move);
+    // Iterative deepening
+    for (int currentDepth = 1; currentDepth <= depth; currentDepth++) {
+        auto layer_start = std::chrono::steady_clock::now(); // Timing a depth
 
-        int score = -alphaBeta(board, depth - 1, -beta, -alpha, 1);
+        int alpha = -INFINITY_SCORE;
+        int beta = INFINITY_SCORE;
 
-        // unmake the move to restore board state
-        board.unmakeMove(move, state);
+        Move bestMoveThisIter = legalMoves[0];
+        int bestScoreThisIter = -INFINITY_SCORE;
 
-        if (score > bestScore) {
-            bestScore = score;
-            bestMove = move;
+        for (const Move &move : legalMoves) {
+            if (out_of_time()) break;
+
+            BoardState state = board.makeMove(move);
+            int score = -alphaBeta(board, currentDepth - 1, -beta, -alpha, 1);
+            board.unmakeMove(move, state);
+
+            if (out_of_time()) break;
+
+            if (score > bestScoreThisIter) {
+                bestScoreThisIter = score;
+                bestMoveThisIter = move;
+            }
+
+            if (score > alpha) {
+                alpha = score;
+            }
         }
 
-        if (score > alpha) {
-            alpha = score;
-        }
+        auto layer_end = std::chrono::steady_clock::now();
+        auto layer_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            layer_end - layer_start)
+                            .count();
+
+        std::cout << "Depth " << currentDepth
+                  << " took " << layer_ms << " ms\n";
+
+        if (out_of_time()) break;
+
+        // Depth completed, update global best move
+        bestMove = bestMoveThisIter;
+        bestScore = bestScoreThisIter;
+        stats.depthReached = currentDepth;
     }
 
-    stats.depthReached = depth;
     return bestMove;
 }
 } // namespace Search
