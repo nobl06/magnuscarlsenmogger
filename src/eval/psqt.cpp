@@ -147,8 +147,8 @@ static void processPieces(uint64_t bitboard, PieceType pieceType, Color color,
             mgScore += bonus.mg;
             egScore += bonus.eg;
         } else {
-            mgScore -= bonus.mg;
-            egScore -= bonus.eg;
+            mgScore += bonus.mg;
+            egScore += bonus.eg;
         }
     }
 }

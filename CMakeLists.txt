@@ -15,4 +15,8 @@ add_executable(MagnusCarlsenMogger
     src/eval/psqt.cpp
     src/eval/material.cpp
     src/eval/positional.cpp
+<<<<<<< HEAD
 )
+=======
+)
+>>>>>>> f1b51f68dd3498e6c2982bf11bddf961142a579b
