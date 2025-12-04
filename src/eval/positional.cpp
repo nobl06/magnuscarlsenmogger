@@ -104,7 +104,13 @@ constexpr Score THREAT_BY_ROOK[7] = {
 };
 
 constexpr Score THREAT_BY_KING = Score(24, 87);
+constexpr Score THREAT_BY_PAWN_PUSH = Score(48, 39);
+constexpr Score THREAT_BY_SAFE_PAWN = Score(167, 99);
 constexpr Score HANGING = Score(72, 40);
+constexpr Score WEAK_QUEEN_PROTECTION = Score(14, 0);
+constexpr Score RESTRICTED_PIECE = Score(6, 7);
+constexpr Score KNIGHT_ON_QUEEN = Score(16, 11);
+constexpr Score SLIDER_ON_QUEEN = Score(62, 21);
 
 
 // Utility Functions
@@ -767,6 +773,224 @@ std::pair<int, int> evaluatePieces(const Board& board) {
 }
 
 
+// ========================================
+// Threats Evaluation
+// ========================================
+
+std::pair<int, int> evaluateThreats(const Board& board) {
+    int mgScore = 0;
+    int egScore = 0;
+    
+    for (Color color : {WHITE, BLACK}) {
+        int sign = (color == WHITE) ? 1 : -1;
+        Color enemy = (Color)(1 - color);
+        
+        uint64_t occupied = board.getAllPieces();
+        
+        uint64_t enemyPieces = (enemy == WHITE) ? board.getAllWhitePieces() : board.getAllBlackPieces();
+        uint64_t nonPawnEnemies = enemyPieces & ~board.bitboards[enemy][PAWN];
+        
+        // Piece attacks tracking
+        uint64_t ourAttackedBy[7] = {0}; // [EMPTY, PAWN, KNIGHT, BISHOP, ROOK, QUEEN, KING]
+        uint64_t enemyAttackedBy[7] = {0};
+        uint64_t ourAttacks = 0;
+        uint64_t enemyAttacks = 0;
+        uint64_t ourAttacks2 = 0;
+        uint64_t enemyAttacks2 = 0;
+        
+        ourAttackedBy[PAWN] = Board::getPawnAttacks(board.bitboards[color][PAWN], color);
+        enemyAttackedBy[PAWN] = Board::getPawnAttacks(board.bitboards[enemy][PAWN], enemy);
+        
+        // Calculate our attacks by piece type (Knights through Kings)
+        for (int pt = KNIGHT; pt <= KING; pt++) {
+            uint64_t pieces = board.bitboards[color][pt];
+            while (pieces) {
+                int sq = Board::popLsb(pieces);
+                uint64_t attacks = 0;
+                
+                if (pt == KNIGHT) attacks = Board::getKnightAttacks(sq);
+                else if (pt == BISHOP) attacks = Board::getBishopAttacks(sq, occupied);
+                else if (pt == ROOK) attacks = Board::getRookAttacks(sq, occupied);
+                else if (pt == QUEEN) attacks = Board::getQueenAttacks(sq, occupied);
+                else if (pt == KING) attacks = Board::getKingAttacks(sq);
+                
+                ourAttackedBy[pt] |= attacks;
+            }
+        }
+        
+        // Calculate enemy attacks by piece type (Knights through Kings)
+        for (int pt = KNIGHT; pt <= KING; pt++) {
+            uint64_t pieces = board.bitboards[enemy][pt];
+            while (pieces) {
+                int sq = Board::popLsb(pieces);
+                uint64_t attacks = 0;
+                
+                if (pt == KNIGHT) attacks = Board::getKnightAttacks(sq);
+                else if (pt == BISHOP) attacks = Board::getBishopAttacks(sq, occupied);
+                else if (pt == ROOK) attacks = Board::getRookAttacks(sq, occupied);
+                else if (pt == QUEEN) attacks = Board::getQueenAttacks(sq, occupied);
+                else if (pt == KING) attacks = Board::getKingAttacks(sq);
+                
+                enemyAttackedBy[pt] |= attacks;
+            }
+        }
+        
+        // Compute all attacks and double attacks (attacks on a square by two or more pieces)
+        for (int pt = PAWN; pt <= KING; pt++) {
+            ourAttacks2 |= (ourAttacks & ourAttackedBy[pt]);
+            ourAttacks |= ourAttackedBy[pt];
+            
+            enemyAttacks2 |= (enemyAttacks & enemyAttackedBy[pt]);
+            enemyAttacks |= enemyAttackedBy[pt];
+        }
+        
+        // pawn attacks
+        uint64_t ourPawnAttacks = ourAttackedBy[PAWN];
+        uint64_t enemyPawnAttacks = enemyAttackedBy[PAWN];
+        
+        uint64_t stronglyProtected = enemyPawnAttacks | (enemyAttacks2 & ~ourAttacks2);
+        
+        // Strongly protected ennemi pieces
+        uint64_t defended = nonPawnEnemies & stronglyProtected;
+        
+        // Enemies not strongly protected and under our attack
+        uint64_t weak = enemyPieces & ~stronglyProtected & ourAttacks;
+        
+        // Bonus according to the kind of attacking pieces
+        if (defended | weak) {
+            // Threats by minor pieces
+            uint64_t minorAttacks = ourAttackedBy[KNIGHT] | ourAttackedBy[BISHOP];
+            uint64_t threatenedByMinor = (defended | weak) & minorAttacks;
+            while (threatenedByMinor) {
+                int sq = Board::popLsb(threatenedByMinor);
+                PieceType piece = board.pieceAt(sq);
+                if (piece != EMPTY) {
+                    mgScore += sign * THREAT_BY_MINOR[piece].mg;
+                    egScore += sign * THREAT_BY_MINOR[piece].eg;
+                }
+            }
+            
+            // Threats by rooks (only weak ennemies attacked by our rooks)
+            uint64_t threatenedByRook = weak & ourAttackedBy[ROOK];
+            while (threatenedByRook) {
+                int sq = Board::popLsb(threatenedByRook);
+                PieceType piece = board.pieceAt(sq);
+                if (piece != EMPTY) {
+                    mgScore += sign * THREAT_BY_ROOK[piece].mg;
+                    egScore += sign * THREAT_BY_ROOK[piece].eg;
+                }
+            }
+            
+            // Threats by king
+            if (weak & ourAttackedBy[KING]) {
+                mgScore += sign * THREAT_BY_KING.mg;
+                egScore += sign * THREAT_BY_KING.eg;
+            }
+            
+            // Hanging pieces
+            // its an ennemy piece that is not strongly protected and we attack it. 
+            // And it is either not defended by enemy at all or its a non pawn ennemy and we attack it twice.
+            uint64_t bitboardHanging = ~enemyAttacks | (nonPawnEnemies & ourAttacks2);
+            int hangingCount = Board::popcount(weak & bitboardHanging);
+            mgScore += sign * hangingCount * HANGING.mg;
+            egScore += sign * hangingCount * HANGING.eg;
+            
+            // Additional bonus if weak piece is only protected by a queen
+            int weakQueenCount = Board::popcount(weak & enemyAttackedBy[QUEEN]);
+            mgScore += sign * weakQueenCount * WEAK_QUEEN_PROTECTION.mg;
+            egScore += sign * weakQueenCount * WEAK_QUEEN_PROTECTION.eg;
+        }
+        
+        // Squares that both sides attack, but they're not strongly protected by them
+        uint64_t restricted = enemyAttacks & ~stronglyProtected & ourAttacks;
+        int restrictedCount = Board::popcount(restricted);
+        mgScore += sign * restrictedCount * RESTRICTED_PIECE.mg;
+        egScore += sign * restrictedCount * RESTRICTED_PIECE.eg;
+        
+        // Protected or unattacked squares
+        uint64_t safe = ~enemyAttacks | ourAttacks;
+        
+
+        uint64_t safePawns = board.bitboards[color][PAWN] & safe;
+        uint64_t safePawnAttacks = Board::getPawnAttacks(safePawns, color);
+        uint64_t threatenedBySafePawn = safePawnAttacks & nonPawnEnemies;
+        
+        // Threats by safe pawns
+        int safePawnThreats = Board::popcount(threatenedBySafePawn);
+        mgScore += sign * safePawnThreats * THREAT_BY_SAFE_PAWN.mg;
+        egScore += sign * safePawnThreats * THREAT_BY_SAFE_PAWN.eg;
+        
+        // Find squares where our pawns can push on the next move
+        uint64_t pawnPushes = 0;
+        if (color == WHITE) {
+            pawnPushes = Board::shiftUp(board.bitboards[WHITE][PAWN]) & ~occupied;
+            uint64_t startingPawns3 = board.bitboards[WHITE][PAWN] & Board::rowBB(1);
+            pawnPushes |= Board::shiftUp(Board::shiftUp(startingPawns3)) & ~occupied & ~Board::shiftUp(occupied); // double push
+        } else {
+            pawnPushes = Board::shiftDown(board.bitboards[BLACK][PAWN]) & ~occupied;
+            uint64_t startingPawns6 = board.bitboards[BLACK][PAWN] & Board::rowBB(6);
+            pawnPushes |= Board::shiftDown(Board::shiftDown(startingPawns6)) & ~occupied & ~Board::shiftDown(occupied);
+        }
+        
+        // Keep only the squares safe
+        pawnPushes &= ~enemyPawnAttacks & safe;
+        
+        // Bonus for safe pawn threats on the next move
+        uint64_t pawnPushThreats = Board::getPawnAttacks(pawnPushes, color) & nonPawnEnemies;
+        int pushThreats = Board::popcount(pawnPushThreats);
+        mgScore += sign * pushThreats * THREAT_BY_PAWN_PUSH.mg;
+        egScore += sign * pushThreats * THREAT_BY_PAWN_PUSH.eg;
+        
+        // Bonus for threats on the next moves against enemy queen
+        uint64_t enemyQueen = board.bitboards[enemy][QUEEN];
+        if (Board::popcount(enemyQueen) == 1) {
+            int queenSq = Board::getLsb(enemyQueen);
+            bool queenImbalance = (Board::popcount(board.bitboards[WHITE][QUEEN]) + 
+                                   Board::popcount(board.bitboards[BLACK][QUEEN])) == 1;
+            
+            // Safe squares for attacks (mobility area, not pawns, not strongly protected)
+            uint64_t safeMobilityArea = safe & ~board.bitboards[color][PAWN] & ~stronglyProtected;
+            
+            // Knight attacks on queen
+            uint64_t knightAttacksOnQueen = Board::getKnightAttacks(queenSq);
+            uint64_t ourKnights = board.bitboards[color][KNIGHT];
+            while (ourKnights) {
+                int sq = Board::popLsb(ourKnights);
+                uint64_t kAttacks = Board::getKnightAttacks(sq);
+                int knightThreats = Board::popcount(kAttacks & knightAttacksOnQueen & safeMobilityArea);
+                mgScore += sign * knightThreats * (1 + queenImbalance) * KNIGHT_ON_QUEEN.mg;
+                egScore += sign * knightThreats * (1 + queenImbalance) * KNIGHT_ON_QUEEN.eg;
+            }
+            
+            // Slider attacks on queen
+            uint64_t bishopAttacksOnQueen = Board::getBishopAttacks(queenSq, occupied);
+            uint64_t rookAttacksOnQueen = Board::getRookAttacks(queenSq, occupied);
+            
+            uint64_t ourBishops = board.bitboards[color][BISHOP];
+            while (ourBishops) {
+                int sq = Board::popLsb(ourBishops);
+                uint64_t bAttacks = Board::getBishopAttacks(sq, occupied);
+                uint64_t sliderThreats = bAttacks & bishopAttacksOnQueen & safeMobilityArea & ourAttacks2;
+                int sliderCount = Board::popcount(sliderThreats);
+                mgScore += sign * sliderCount * (1 + queenImbalance) * SLIDER_ON_QUEEN.mg;
+                egScore += sign * sliderCount * (1 + queenImbalance) * SLIDER_ON_QUEEN.eg;
+            }
+            
+            uint64_t ourRooks = board.bitboards[color][ROOK];
+            while (ourRooks) {
+                int sq = Board::popLsb(ourRooks);
+                uint64_t rAttacks = Board::getRookAttacks(sq, occupied);
+                uint64_t sliderThreats = rAttacks & rookAttacksOnQueen & safeMobilityArea & ourAttacks2;
+                int sliderCount = Board::popcount(sliderThreats);
+                mgScore += sign * sliderCount * (1 + queenImbalance) * SLIDER_ON_QUEEN.mg;
+                egScore += sign * sliderCount * (1 + queenImbalance) * SLIDER_ON_QUEEN.eg;
+            }
+        }
+    }
+    
+    return {mgScore, egScore};
+}
+
 
 
 // ========================================
@@ -778,9 +1002,10 @@ std::pair<int, int> evaluatePositional(const Board& board) {
     auto [mobilityMg, mobilityEg] = evaluateMobility(board);
     auto [kingSafetyMg, kingSafetyEg] = evaluateKingSafety(board);
     auto [piecesMg, piecesEg] = evaluatePieces(board);
+    auto [threatsMg, threatsEg] = evaluateThreats(board);
 
-    int mgTotal = pawnMg + mobilityMg + kingSafetyMg + piecesMg;
-    int egTotal = pawnEg + mobilityEg + kingSafetyEg + piecesEg;
+    int mgTotal = pawnMg + mobilityMg + kingSafetyMg + piecesMg + threatsMg;
+    int egTotal = pawnEg + mobilityEg + kingSafetyEg + piecesEg + threatsEg;
     
     return {mgTotal, egTotal};
 }
