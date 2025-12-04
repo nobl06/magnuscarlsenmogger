@@ -19,32 +19,32 @@ namespace Search {
 Stats stats;
 Info info;
 
-// piece values for MVV-LVA 
+// piece values for MVV-LVA
 constexpr int pieceValues[7] = {
-    0,    // EMPTY
-    100,  // PAWN
-    300,  // KNIGHT
-    300,  // BISHOP
-    500,  // ROOK
-    900,  // QUEEN
-    0     // KING
+    0,   // EMPTY
+    100, // PAWN
+    300, // KNIGHT
+    300, // BISHOP
+    500, // ROOK
+    900, // QUEEN
+    0    // KING
 };
 
-int scoreMove(const Move& move, const Board& board) {
+int scoreMove(const Move &move, const Board &board) {
     PieceType victim = board.pieceAt(move.to);
     PieceType attacker = board.pieceAt(move.from);
-    
+
     // captures score
     if (victim != PieceType::EMPTY) {
         return 10000 + 10 * pieceValues[victim] - pieceValues[attacker];
     }
-    
+
     // promotions score
     if (move.promotion != PieceType::EMPTY) {
         return 9000 + pieceValues[move.promotion];
     }
-    
-    //quiet move
+
+    // quiet move
     return 0;
 }
 
@@ -66,13 +66,13 @@ int alphaBeta(Board &board, int depth, int alpha, int beta, int ply) {
     MoveGenerator gen(board, board.sideToMove);
     std::vector<Move> pseudoLegal = gen.generatePseudoLegalMoves();
     std::vector<Move> legalMoves = gen.filterLegalMoves(pseudoLegal);
-    
+
     // sort moves with score (MVV-LVA ordering)
-    for (Move& move : legalMoves) {
+    for (Move &move : legalMoves) {
         move.score = scoreMove(move, board);
     }
     std::sort(legalMoves.begin(), legalMoves.end(),
-              [](const Move& a, const Move& b) { return a.score > b.score; });
+              [](const Move &a, const Move &b) { return a.score > b.score; });
 
     // check for checkmate/stalemate
     if (legalMoves.empty()) {
@@ -130,20 +130,20 @@ Move findBestMove(Board &board, int depth) {
     info.maxDepth = depth;
 
     start_time = std::chrono::steady_clock::now();
-    time_limit_ms = 9000; // 9 seconds
+    time_limit_ms = 9500; // 9 seconds
 
     // generate root moves
     MoveGenerator gen(board, board.sideToMove);
     std::vector<Move> pseudoLegal = gen.generatePseudoLegalMoves();
     std::vector<Move> legalMoves = gen.filterLegalMoves(pseudoLegal);
-    
+
     // sort moves with score (MVV-LVA ordering)
-    for (Move& move : legalMoves) {
+    for (Move &move : legalMoves) {
         move.score = scoreMove(move, board);
     }
     std::sort(legalMoves.begin(), legalMoves.end(),
-              [](const Move& a, const Move& b) { return a.score > b.score; });
-    
+              [](const Move &a, const Move &b) { return a.score > b.score; });
+
     if (legalMoves.empty()) {
         return Move(); // no legal moves (checkmate or stalemate), return empty move
     }
