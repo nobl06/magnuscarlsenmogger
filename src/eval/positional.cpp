@@ -86,7 +86,6 @@ constexpr Score KING_ON_FILE[2][2] = {
 constexpr Score ROOK_ON_OPEN_FILE = Score(49, 26);
 constexpr Score ROOK_ON_SEMIOPEN_FILE = Score(18, 8);
 constexpr Score ROOK_ON_CLOSED_FILE = Score(10, 5);
-constexpr Score BISHOP_PAIR = Score(30, 65);
 constexpr Score KNIGHT_OUTPOST = Score(54, 34);
 constexpr Score BISHOP_OUTPOST = Score(31, 25);
 constexpr Score MINOR_BEHIND_PAWN = Score(18, 3);
@@ -329,17 +328,42 @@ std::pair<int, int> evaluatePawns(const Board& board) {
 std::pair<int, int> evaluateMobility(const Board& board) {
     int mgScore = 0;
     int egScore = 0;
-    uint64_t occupied = board.getAllPieces();
     
     for (Color color : {WHITE, BLACK}) {
         int sign = (color == WHITE) ? 1 : -1;
-        uint64_t ourPieces = (color == WHITE) ? board.getAllWhitePieces() : board.getAllBlackPieces();
+        Color enemy = (Color)(1 - color);
         
-        // Mobility area: not attacked by enemy pawns, not occupied by our pieces
-        uint64_t mobilityArea = ~(Board::getPawnAttacks(board.bitboards[1 - color][PAWN], (Color)(1 - color)))
-                                & ~ourPieces;
+
+        uint64_t allPieces = board.getAllPieces();
+        uint64_t ourPawns = board.bitboards[color][PAWN];
         
-        // Knights
+        uint64_t blockedPawns;
+        if (color == WHITE) {
+            blockedPawns = ourPawns & Board::shiftDown(allPieces);
+        } else {
+            blockedPawns = ourPawns & Board::shiftUp(allPieces);
+        }
+        
+        // Low rank pawns: on ranks 2-3 for White, 6-7 for Black
+        uint64_t lowRanks = (color == WHITE) 
+            ? (Board::rowBB(1) | Board::rowBB(2))
+            : (Board::rowBB(6) | Board::rowBB(5));
+        uint64_t lowRankPawns = ourPawns & lowRanks;
+        
+        // Undeveloped pawns = blocked OR on low ranks
+        uint64_t undevelopedPawns = blockedPawns | lowRankPawns;
+        
+        // Mobility area: squares not attacked by enemy pawns, not occupied by:
+        // - our king
+        // - our queen  
+        // - our developed pawns
+        uint64_t enemyPawnAttacks = Board::getPawnAttacks(board.bitboards[enemy][PAWN], enemy);
+        uint64_t mobilityArea = ~enemyPawnAttacks
+                                & ~board.bitboards[color][KING]
+                                & ~board.bitboards[color][QUEEN]
+                                & ~(ourPawns & ~undevelopedPawns);
+        
+        // Knights - simple attacks
         uint64_t knights = board.bitboards[color][KNIGHT];
         while (knights) {
             int sq = Board::popLsb(knights);
@@ -350,33 +374,40 @@ std::pair<int, int> evaluateMobility(const Board& board) {
             egScore += sign * MOBILITY_KNIGHT[mobility].eg;
         }
         
-        // Bishops
+        // Bishops - x-ray through queens for mobility calculation
         uint64_t bishops = board.bitboards[color][BISHOP];
         while (bishops) {
             int sq = Board::popLsb(bishops);
-            uint64_t attacks = Board::getBishopAttacks(sq, occupied);
+            // See through queens (potential mobility even when blocked)
+            uint64_t bishopOccupancy = allPieces ^ board.bitboards[color][QUEEN];
+            uint64_t attacks = Board::getBishopAttacks(sq, bishopOccupancy);
             int mobility = Board::popcount(attacks & mobilityArea);
             mobility = std::min(mobility, 13);
             mgScore += sign * MOBILITY_BISHOP[mobility].mg;
             egScore += sign * MOBILITY_BISHOP[mobility].eg;
         }
         
-        // Rooks
+        // Rooks - x-ray through queens and other rooks
         uint64_t rooks = board.bitboards[color][ROOK];
-        while (rooks) {
-            int sq = Board::popLsb(rooks);
-            uint64_t attacks = Board::getRookAttacks(sq, occupied);
+        uint64_t rooksCopy = rooks;
+        while (rooksCopy) {
+            int sq = Board::popLsb(rooksCopy);
+            // See through queens and other rooks (but not the current rook)
+            uint64_t rookOccupancy = allPieces 
+                                    ^ board.bitboards[color][QUEEN]
+                                    ^ (rooks & ~(1ULL << sq));
+            uint64_t attacks = Board::getRookAttacks(sq, rookOccupancy);
             int mobility = Board::popcount(attacks & mobilityArea);
             mobility = std::min(mobility, 14);
             mgScore += sign * MOBILITY_ROOK[mobility].mg;
             egScore += sign * MOBILITY_ROOK[mobility].eg;
         }
         
-        // Queens
+        // Queens - standard attacks
         uint64_t queens = board.bitboards[color][QUEEN];
         while (queens) {
             int sq = Board::popLsb(queens);
-            uint64_t attacks = Board::getQueenAttacks(sq, occupied);
+            uint64_t attacks = Board::getQueenAttacks(sq, allPieces);
             int mobility = Board::popcount(attacks & mobilityArea);
             mobility = std::min(mobility, 27);
             mgScore += sign * MOBILITY_QUEEN[mobility].mg;
@@ -532,80 +563,208 @@ std::pair<int, int> evaluateKingSafety(const Board& board) {
         }
         
         // Pawn shelter and storm evaluation
-        int kColumn = Board::column(kingSq);
+        //only evaluate shelter if king has lost castling rights
+        bool canCastleKingside = (color == WHITE) ? board.whiteCanKingside : board.blackCanKingside;
+        bool canCastleQueenside = (color == WHITE) ? board.whiteCanQueenside : board.blackCanQueenside;
         
-        int shelterMg = 5;
-        int shelterEg = 5;
-        
-        // Only consider pawns that are relevant (at or in front of my king)
-        uint64_t relevantPawns = board.bitboards[color][PAWN] | board.bitboards[enemy][PAWN];
-        relevantPawns &= ~Board::forwardRowsBB(enemy, kingSq);
-        
-        uint64_t ourPawns = relevantPawns & board.bitboards[color][PAWN];
-        uint64_t enemyPawns = relevantPawns & board.bitboards[enemy][PAWN];
-        
-        // Filter our pawns: exclude those attacked by enemy pawns
-        uint64_t enemyPawnAttacks = Board::getPawnAttacks(board.bitboards[enemy][PAWN], enemy);
-        ourPawns &= ~enemyPawnAttacks;
-        
-        // Center file
-        int centerColumn = std::max(1, std::min(6, kColumn));
-        
-        // Check the 3 columns around the center
-        for (int column = centerColumn - 1; column <= centerColumn + 1; ++column) {
-            int edgeDist = std::min(column, 7 - column);
+        if (!canCastleKingside && !canCastleQueenside) {
+            int kColumn = Board::column(kingSq);
             
-            // Find our pawn on this file
-            uint64_t ourColumnPawns = ourPawns & Board::columnBB(column);
-            int ourRow = 0;
-            if (ourColumnPawns) {
-                // Get closest pawn to king
-                int pawnSq = color == WHITE ? Board::getLsb(ourColumnPawns) : Board::getMsb(ourColumnPawns);
-                ourRow = relativeRow(color, pawnSq);
+            int shelterMg = 5;
+            int shelterEg = 5;
+            
+            // Only consider pawns that are relevant (at or in front of my king)
+            uint64_t relevantPawns = board.bitboards[color][PAWN] | board.bitboards[enemy][PAWN];
+            relevantPawns &= ~Board::forwardRowsBB(enemy, kingSq);
+            
+            uint64_t ourPawns = relevantPawns & board.bitboards[color][PAWN];
+            uint64_t enemyPawns = relevantPawns & board.bitboards[enemy][PAWN];
+            
+            // Filter our pawns: exclude those attacked by enemy pawns
+            uint64_t enemyPawnAttacks = Board::getPawnAttacks(board.bitboards[enemy][PAWN], enemy);
+            ourPawns &= ~enemyPawnAttacks;
+            
+            // Center file
+            int centerColumn = std::max(1, std::min(6, kColumn));
+            
+            // Check the 3 columns around the center
+            for (int column = centerColumn - 1; column <= centerColumn + 1; ++column) {
+                int edgeDist = std::min(column, 7 - column);
                 
-                // Only count if pawn is in front of king
-                int kingRelRow = relativeRow(color, kingSq);
-                if (ourRow <= kingRelRow) {
-                    ourRow = 0;
+                // Find our pawn on this file
+                uint64_t ourColumnPawns = ourPawns & Board::columnBB(column);
+                int ourRow = 0;
+                if (ourColumnPawns) {
+                    // Get closest pawn to king
+                    int pawnSq = color == WHITE ? Board::getLsb(ourColumnPawns) : Board::getMsb(ourColumnPawns);
+                    ourRow = relativeRow(color, pawnSq);
+                    
+                    // Only count if pawn is in front of king
+                    int kingRelRow = relativeRow(color, kingSq);
+                    if (ourRow <= kingRelRow) {
+                        ourRow = 0;
+                    }
+                }
+                
+                // Find enemy pawn on this file
+                uint64_t enemyColumnPawns = enemyPawns & Board::columnBB(column);
+                int enemyRow = 0;
+                if (enemyColumnPawns) {
+                    // Get enemy pawn most advanced toward us
+                    int pawnSq = enemy == WHITE ? Board::getMsb(enemyColumnPawns) : Board::getLsb(enemyColumnPawns);
+                    enemyRow = relativeRow(enemy, pawnSq);
+                }
+                
+                shelterMg += SHELTER_STRENGTH[edgeDist][ourRow];
+                
+                // Apply storm penalty
+                if (ourRow && (ourRow == enemyRow - 1)) {
+                    // Our pawn and enemy pawn are face-to-face (Blocked Storm)
+                    shelterMg -= BLOCKED_STORM[enemyRow].mg;
+                    shelterEg -= BLOCKED_STORM[enemyRow].eg;
+                } else {
+                    // Unblocked storm
+                    shelterMg -= UNBLOCKED_STORM[edgeDist][enemyRow];
                 }
             }
             
-            // Find enemy pawn on this file
-            uint64_t enemyColumnPawns = enemyPawns & Board::columnBB(column);
-            int enemyRow = 0;
-            if (enemyColumnPawns) {
-                // Get enemy pawn most advanced toward us
-                int pawnSq = enemy == WHITE ? Board::getMsb(enemyColumnPawns) : Board::getLsb(enemyColumnPawns);
-                enemyRow = relativeRow(enemy, pawnSq);
-            }
+            // King on file penalty
+            bool ourSemiOpen = Board::isOnSemiOpenFile(board, color, kColumn);
+            bool enemySemiOpen = Board::isOnSemiOpenFile(board, enemy, kColumn);
+            shelterMg -= KING_ON_FILE[ourSemiOpen][enemySemiOpen].mg;
+            shelterEg -= KING_ON_FILE[ourSemiOpen][enemySemiOpen].eg;
             
-            shelterMg += SHELTER_STRENGTH[edgeDist][ourRow];
-            
-            // Apply storm penalty
-            if (ourRow && (ourRow == enemyRow - 1)) {
-                // Our pawn and enemy pawn are face-to-face (Blocked Storm)
-                shelterMg -= BLOCKED_STORM[enemyRow].mg;
-                shelterEg -= BLOCKED_STORM[enemyRow].eg;
-            } else {
-                // Unblocked storm
-                shelterMg -= UNBLOCKED_STORM[edgeDist][enemyRow];
-            }
+            mgScore += sign * shelterMg;
+            egScore += sign * shelterEg;
         }
-        
-        // King on file penalty
-        bool ourSemiOpen = Board::isOnSemiOpenFile(board, color, kColumn);
-        bool enemySemiOpen = Board::isOnSemiOpenFile(board, enemy, kColumn);
-        shelterMg -= KING_ON_FILE[ourSemiOpen][enemySemiOpen].mg;
-        shelterEg -= KING_ON_FILE[ourSemiOpen][enemySemiOpen].eg;
-        
-        mgScore += sign * shelterMg;
-        egScore += sign * shelterEg;
     }
     
     return {mgScore, egScore};
 }
 
 
+// ======================================== 
+// Piece-Specific Evaluation
+// ========================================
+
+std::pair<int, int> evaluatePieces(const Board& board) {
+    int mgScore = 0;
+    int egScore = 0;
+    uint64_t occupied = board.getAllPieces();
+    
+    for (Color color : {WHITE, BLACK}) {
+        int sign = (color == WHITE) ? 1 : -1;
+        
+        
+        // Rooks on open/semi-open/closed files
+        uint64_t rooks = board.bitboards[color][ROOK];
+        uint64_t rooksCopy = rooks;
+        while (rooksCopy) {
+            int sq = Board::popLsb(rooksCopy);
+            int column = Board::column(sq);
+            
+            uint64_t ourPawnsOnColumn = board.bitboards[color][PAWN] & Board::columnBB(column);
+            uint64_t enemyPawnsOnColumn = board.bitboards[1 - color][PAWN] & Board::columnBB(column);
+            
+            if (ourPawnsOnColumn == 0) {
+                if (enemyPawnsOnColumn == 0) {
+                    // Open file
+                    mgScore += sign * ROOK_ON_OPEN_FILE.mg;
+                    egScore += sign * ROOK_ON_OPEN_FILE.eg;
+                } else {
+                    // Semi-open file
+                    mgScore += sign * ROOK_ON_SEMIOPEN_FILE.mg;
+                    egScore += sign * ROOK_ON_SEMIOPEN_FILE.eg;
+                }
+            } else {
+                if (enemyPawnsOnColumn != 0) {
+                    // Closed file
+                    uint64_t blockedPawns = ourPawnsOnColumn & Board::shiftDown(occupied);
+                    if (color == BLACK) {
+                        blockedPawns = ourPawnsOnColumn & Board::shiftUp(occupied);
+                    }
+                    
+                    if (blockedPawns) {
+                        mgScore -= sign * ROOK_ON_CLOSED_FILE.mg;
+                        egScore -= sign * ROOK_ON_CLOSED_FILE.eg;
+                    }
+                }
+            }
+        }
+        
+        // Knight outposts and minor pieces
+        uint64_t knights = board.bitboards[color][KNIGHT];
+        uint64_t knightsCopy = knights;
+        uint64_t ourPawns = board.bitboards[color][PAWN];
+        uint64_t enemyPawns = board.bitboards[1 - color][PAWN];
+        
+        // Build outpost rows
+        uint64_t outpostRows = (color == WHITE) 
+            ? (Board::rowBB(3) | Board::rowBB(4) | Board::rowBB(5))
+            : (Board::rowBB(4) | Board::rowBB(3) | Board::rowBB(2));
+        
+        // Squares defended by our pawns
+        uint64_t pawnDefended = Board::getPawnAttacks(ourPawns, color);
+        
+        while (knightsCopy) {
+            int sq = Board::popLsb(knightsCopy);
+            int row = relativeRow(color, sq);
+            int column = Board::column(sq);
+            
+            // Check for outpost
+            if (outpostRows & (1ULL << sq)) {
+                if (pawnDefended & (1ULL << sq)) {
+                    // Check if safe from enemy pawns
+                    uint64_t attackSpan = Board::forwardRowsBB(color, sq) 
+                                        &  Board::adjacentColumnsBB(column);
+                    
+                    if ((enemyPawns & attackSpan) == 0) {
+                        mgScore += sign * KNIGHT_OUTPOST.mg;
+                        egScore += sign * KNIGHT_OUTPOST.eg;
+                    }
+                }
+            }
+            
+            // Knight shielded by friendly pawn
+            int frontSq = color == WHITE ? sq + 8 : sq - 8;
+            if (frontSq >= 0 && frontSq < 64 && (ourPawns & (1ULL << frontSq))) {
+                mgScore += sign * MINOR_BEHIND_PAWN.mg;
+                egScore += sign * MINOR_BEHIND_PAWN.eg;
+            }
+        }
+        
+        // Bishop outposts
+        uint64_t bishops = board.bitboards[color][BISHOP];
+        uint64_t bishopsCopy = bishops;
+        
+        while (bishopsCopy) {
+            int sq = Board::popLsb(bishopsCopy);
+            int column = Board::column(sq);
+            
+            if (outpostRows & (1ULL << sq)) {
+                if (pawnDefended & (1ULL << sq)) {
+                    // Check if safe from enemy pawns
+                    uint64_t attackSpan = Board::forwardRowsBB(color, sq) 
+                                        & Board::adjacentColumnsBB(column);
+                    
+                    if ((enemyPawns & attackSpan) == 0) {
+                        mgScore += sign * BISHOP_OUTPOST.mg;
+                        egScore += sign * BISHOP_OUTPOST.eg;
+                    }
+                }
+            }
+        
+            // Bishop shielded by friendly pawn
+            int frontSq = color == WHITE ? sq + 8 : sq - 8;
+            if (frontSq >= 0 && frontSq < 64 && (ourPawns & (1ULL << frontSq))) {
+                mgScore += sign * MINOR_BEHIND_PAWN.mg;
+                egScore += sign * MINOR_BEHIND_PAWN.eg;
+            }
+        }
+    }
+    
+    return {mgScore, egScore};
+}
 
 
 
@@ -618,9 +777,10 @@ std::pair<int, int> evaluatePositional(const Board& board) {
     auto [pawnMg, pawnEg] = evaluatePawns(board);
     auto [mobilityMg, mobilityEg] = evaluateMobility(board);
     auto [kingSafetyMg, kingSafetyEg] = evaluateKingSafety(board);
+    auto [piecesMg, piecesEg] = evaluatePieces(board);
 
-    int mgTotal = pawnMg + mobilityMg + kingSafetyMg;
-    int egTotal = pawnEg + mobilityEg + kingSafetyEg;
+    int mgTotal = pawnMg + mobilityMg + kingSafetyMg + piecesMg;
+    int egTotal = pawnEg + mobilityEg + kingSafetyEg + piecesEg;
     
     return {mgTotal, egTotal};
 }
