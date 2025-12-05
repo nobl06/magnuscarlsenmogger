@@ -1,4 +1,6 @@
 #include "positional.h"
+#include <algorithm>
+#include <cmath>
 
 namespace Positional {
 
@@ -96,6 +98,16 @@ constexpr Score BISHOP_ON_KING_RING = Score(24, 0);
 constexpr Score SPACE_BONUS = Score(2, 0);
 constexpr int MIN_PIECES_FOR_SPACE = 2;
 
+// Bishop on long diagonal
+constexpr Score LONG_DIAGONAL_BISHOP = Score(45, 0);
+
+// Center squares for long diagonal bishop (d4, e4, d5, e5)
+constexpr uint64_t CENTER_SQUARES = (1ULL << 27) | (1ULL << 28) | (1ULL << 35) | (1ULL << 36);
+
+// KingProtector
+constexpr Score KING_PROTECTOR_KNIGHT = Score(9, 9);
+constexpr Score KING_PROTECTOR_BISHOP = Score(7, 9);
+
 // Threat bonuses
 constexpr Score THREAT_BY_MINOR[7] = {
     Score(0, 0), Score(6, 37), Score(64, 50), Score(82, 57),
@@ -122,7 +134,6 @@ inline int relativeRow(Color color, int square) {
     int row = Board::row(square);
     return color == WHITE ? row : 7 - row;
 }
-
 
 // Get king zone (king + adjacent squares)
 uint64_t getKingZone(int kingSq, Color color) {
@@ -702,6 +713,10 @@ std::pair<int, int> evaluatePieces(const Board& board) {
             }
         }
         
+        // Get our king square for KingProtector calculation
+        uint64_t ourKing = board.bitboards[color][KING];
+        int ourKingSq = ourKing ? Board::getLsb(ourKing) : 0;
+        
         // Knight outposts and minor pieces
         uint64_t knights = board.bitboards[color][KNIGHT];
         uint64_t knightsCopy = knights;
@@ -720,6 +735,11 @@ std::pair<int, int> evaluatePieces(const Board& board) {
             int sq = Board::popLsb(knightsCopy);
             int row = relativeRow(color, sq);
             int column = Board::column(sq);
+            
+            // KingProtector: penalty based on distance from our king
+            int dist = Board::distance(sq, ourKingSq);
+            mgScore -= sign * KING_PROTECTOR_KNIGHT.mg * dist;
+            egScore -= sign * KING_PROTECTOR_KNIGHT.eg * dist;
             
             // Check for outpost
             if (outpostRows & (1ULL << sq)) {
@@ -743,13 +763,25 @@ std::pair<int, int> evaluatePieces(const Board& board) {
             }
         }
         
-        // Bishop outposts
+        // Bishop outposts and bonuses
         uint64_t bishops = board.bitboards[color][BISHOP];
         uint64_t bishopsCopy = bishops;
         
         while (bishopsCopy) {
             int sq = Board::popLsb(bishopsCopy);
             int column = Board::column(sq);
+            
+            // KingProtector: penalty based on distance from our king
+            int dist = Board::distance(sq, ourKingSq);
+            mgScore -= sign * KING_PROTECTOR_BISHOP.mg * dist;
+            egScore -= sign * KING_PROTECTOR_BISHOP.eg * dist;
+            
+            // LongDiagonalBishop: bonus if bishop can see at least 2 center squares
+            uint64_t bishopVision = Board::getBishopAttacks(sq, occupied);
+            if (Board::popcount(bishopVision & CENTER_SQUARES) >= 2) {
+                mgScore += sign * LONG_DIAGONAL_BISHOP.mg;
+                egScore += sign * LONG_DIAGONAL_BISHOP.eg;
+            }
             
             if (outpostRows & (1ULL << sq)) {
                 if (pawnDefended & (1ULL << sq)) {
@@ -758,8 +790,8 @@ std::pair<int, int> evaluatePieces(const Board& board) {
                                         & Board::adjacentColumnsBB(column);
                     
                     if ((enemyPawns & attackSpan) == 0) {
-                    mgScore += sign * BISHOP_OUTPOST.mg;
-                    egScore += sign * BISHOP_OUTPOST.eg;
+                        mgScore += sign * BISHOP_OUTPOST.mg;
+                        egScore += sign * BISHOP_OUTPOST.eg;
                     }
                 }
             }
@@ -1033,14 +1065,12 @@ std::pair<int, int> evaluateSpace(const Board& board) {
         uint64_t ourPawns = board.bitboards[color][PAWN];
         uint64_t behind = 0ULL;
         if (color == WHITE) {
-            // For white, "behind" means lower ranks (towards rank 1)
             uint64_t temp = ourPawns;
             while (temp) {
                 temp = Board::shiftDown(temp);
                 behind |= temp;
             }
         } else {
-            // For black, "behind" means higher ranks (towards rank 8)
             uint64_t temp = ourPawns;
             while (temp) {
                 temp = Board::shiftUp(temp);
@@ -1086,7 +1116,6 @@ std::pair<int, int> evaluateSpace(const Board& board) {
         int pieces = (color == WHITE) ? whitePieces : blackPieces;
         int weight = blockedPawns + pieces - 3;
         
-        // Count safe space squares
         int spaceCount = Board::popcount(spaceMask);
         
         // Apply bonus
@@ -1096,6 +1125,96 @@ std::pair<int, int> evaluateSpace(const Board& board) {
     }
     
     return {mgScore, egScore};
+}
+
+// ========================================
+// Winnable/Complexity Adjustment
+// ========================================
+
+// Count passed pawns
+int countPassedPawns(const Board& board) {
+    return Board::popcount(getPassedPawns(board, WHITE)) + 
+           Board::popcount(getPassedPawns(board, BLACK));
+}
+
+
+// Adjusts evaluation based on position complexity and winning chances
+std::pair<int, int> applyWinnable(const Board& board, int mg, int eg) {
+    // King positions
+    uint64_t whiteKing = board.bitboards[WHITE][KING];
+    uint64_t blackKing = board.bitboards[BLACK][KING];
+    
+    // Safety check
+    if (!whiteKing || !blackKing) {
+        return {mg, eg};
+    }
+    
+    int whiteKingSq = Board::getLsb(whiteKing);
+    int blackKingSq = Board::getLsb(blackKing);
+    
+    int whiteKingColumn = Board::column(whiteKingSq);
+    int blackKingColumn = Board::column(blackKingSq);
+    int whiteKingRow = Board::row(whiteKingSq);
+    int blackKingRow = Board::row(blackKingSq);
+    
+    // Pawns on both flanks check (queenside: a-c files, kingside: f-h files)
+    uint64_t allPawns = board.bitboards[WHITE][PAWN] | board.bitboards[BLACK][PAWN];
+    uint64_t queenside = Board::columnBB(0) | Board::columnBB(1) | Board::columnBB(2);
+    uint64_t kingside = Board::columnBB(5) | Board::columnBB(6) | Board::columnBB(7);
+    bool pawnsOnBothFlanks = (allPawns & queenside) && (allPawns & kingside);
+    
+    // Outflanking calculation
+    int outflanking;
+    if (!pawnsOnBothFlanks && std::abs(whiteKingColumn - blackKingColumn) <= 1) {
+        outflanking = (whiteKingColumn < blackKingColumn) ? -37 : 37;
+    } else {
+        outflanking = std::abs(whiteKingColumn - blackKingColumn) 
+                    - std::abs(whiteKingRow - blackKingRow);
+    }
+    
+    // Infiltration: king has penetrated enemy territory
+    // Can be 0, 1, or 2 (both kings infiltrating)
+    // White infiltrates if rank > 3 (ranks 4-7), Black infiltrates if rank < 4 (ranks 0-3)
+    int infiltration = (whiteKingRow > 3 ? 1 : 0) + (blackKingRow < 4 ? 1 : 0);
+    
+    // Pawn count
+    int pawnCount = Board::popcount(board.bitboards[WHITE][PAWN]) + 
+                    Board::popcount(board.bitboards[BLACK][PAWN]);
+    
+    // Passed pawns count
+    int passedCount = countPassedPawns(board);
+    
+    // Check for pure pawn endgame (no non-pawn material)
+    bool pureEndgame = (Board::popcount(board.bitboards[WHITE][KNIGHT]) +
+                        Board::popcount(board.bitboards[WHITE][BISHOP]) +
+                        Board::popcount(board.bitboards[WHITE][ROOK]) +
+                        Board::popcount(board.bitboards[WHITE][QUEEN]) +
+                        Board::popcount(board.bitboards[BLACK][KNIGHT]) +
+                        Board::popcount(board.bitboards[BLACK][BISHOP]) +
+                        Board::popcount(board.bitboards[BLACK][ROOK]) +
+                        Board::popcount(board.bitboards[BLACK][QUEEN])) == 0;
+    
+    // Almost unwinnable: drawish position
+    // No infiltration, no pawns on both flanks, and outflanking is negative
+    bool almostUnwinnable = !infiltration && !pawnsOnBothFlanks && (outflanking < 0);
+    
+    // Stockfish complexity formula
+    int complexity =   9 * passedCount
+                    + 12 * pawnCount
+                    +  9 * outflanking
+                    + 21 * (pawnsOnBothFlanks ? 1 : 0)
+                    + 24 * infiltration
+                    + 51 * (pureEndgame ? 1 : 0)
+                    - 43 * (almostUnwinnable ? 1 : 0)
+                    - 110;
+    
+    // Adjust endgame score based on complexity
+    // sign = +1 if white winning, -1 if black winning, 0 if equal
+    int sign = (eg > 0) - (eg < 0);
+
+    int egAdjusted = eg + sign * std::max(complexity, -std::abs(eg));
+    
+    return {mg, egAdjusted};
 }
 
 // ========================================

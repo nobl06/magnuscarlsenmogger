@@ -53,11 +53,15 @@ int evaluate(const Board& board) {
     int mgScore = materialMG + psqtMG + positionalMG;
     int egScore = materialEG + psqtEG + positionalEG;
     
+
+    // Adjust the endgame score based on position complexity
+    auto [mgFinal, egFinal] = Positional::applyWinnable(board, mgScore, egScore);
+    
     // calculate game phase
     int phase = calculateGamePhase(board);
     
     // Interpolate between midgame and endgame scores
-    int score = interpolate(mgScore, egScore, phase);
+    int score = interpolate(mgFinal, egFinal, phase);
     
     // Add tempo bonus for white starting position
     constexpr int TEMPO_BONUS = 28;

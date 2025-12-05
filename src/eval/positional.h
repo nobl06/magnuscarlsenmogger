@@ -28,5 +28,9 @@ uint64_t getIsolatedPawns(const Board& board, Color color);
 uint64_t getDoubledPawns(const Board& board, Color color);
 uint64_t getBackwardPawns(const Board& board, Color color);
 
+// Winnable/Complexity adjustment
+std::pair<int, int> applyWinnable(const Board& board, int mg, int eg);
+int countPassedPawns(const Board& board);
+
 }
 
