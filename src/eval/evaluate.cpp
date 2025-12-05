@@ -59,6 +59,10 @@ int evaluate(const Board& board) {
     // Interpolate between midgame and endgame scores
     int score = interpolate(mgScore, egScore, phase);
     
+    // Add tempo bonus for white starting position
+    constexpr int TEMPO_BONUS = 28;
+    score += TEMPO_BONUS;
+    
     // Return score from the perspective of the side to move
     // If it's white's turn, return (positive = good for white)
     // If it's black's turn, return negative (positive = good for black)

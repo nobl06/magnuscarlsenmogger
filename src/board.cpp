@@ -460,29 +460,48 @@ bool Board::isSquareOccupiedByColor(int pos, Color color) const {
 }
 
 int Board::getLsb(std::uint64_t bb) {
-    // Simple portable version - count trailing zeros
-    int count = 0;
-    while ((bb & 1) == 0) {
-        bb >>= 1;
-        count++;
-    }
-    return count;
+    #if defined(__GNUC__) || defined(__clang__)
+        // Use builtin function for better performance
+        return __builtin_ctzll(bb);
+    #else
+        // Fallback: count trailing zeros manually
+        int count = 0;
+        while ((bb & 1) == 0) {
+            bb >>= 1;
+            count++;
+        }
+        return count;
+    #endif
 }
 
 int Board::getMsb(std::uint64_t bb) {
-    // Find most significant bit
-    if (bb == 0) return -1;
-    int msb = 0;
-    while (bb >>= 1) {
-        msb++;
-    }
-    return msb;
+    #if defined(__GNUC__) || defined(__clang__)
+        // Use builtin function for better performance
+        if (bb == 0) return -1;
+        return 63 - __builtin_clzll(bb);
+    #else
+        // Fallback: find most significant bit manually
+        if (bb == 0) return -1;
+        int msb = 0;
+        while (bb >>= 1) {
+            msb++;
+        }
+        return msb;
+    #endif
 }
 
 int Board::popLsb(std::uint64_t &bb) {
-    int pos = getLsb(bb);
-    bb &= bb - 1; // Clear the least significant bit
-    return pos;
+    #if defined(__GNUC__) || defined(__clang__)
+        // Use builtin function for better performance
+        int pos = __builtin_ctzll(bb);
+        bb &= bb - 1; // Clear the least significant bit
+        return pos;
+    #else
+        // Fallback: use getLsb
+        int pos = getLsb(bb);
+        bb &= bb - 1; // Clear the least significant bit
+        return pos;
+    #endif
 }
 
 void Board::gamestate(const std::vector<std::string> &move_hist) {
@@ -604,11 +623,16 @@ bool Board::isKingInCheck(Color kingColor) const {
 // Bitboard Utility Functions
 
 int Board::popcount(uint64_t bb) {
-    // Parallel bit counting algorithm or SWAR algorithm
-    bb = bb - ((bb >> 1) & 0x5555555555555555ULL);
-    bb = (bb & 0x3333333333333333ULL) + ((bb >> 2) & 0x3333333333333333ULL);
-    bb = (bb + (bb >> 4)) & 0x0F0F0F0F0F0F0F0FULL;
-    return (bb * 0x0101010101010101ULL) >> 56;
+    #if defined(__GNUC__) || defined(__clang__)
+        // Use builtin function for better performance
+        return __builtin_popcountll(bb);
+    #else
+        // Fallback: SWAR algorithm (parallel bit counting)
+        bb = bb - ((bb >> 1) & 0x5555555555555555ULL);
+        bb = (bb & 0x3333333333333333ULL) + ((bb >> 2) & 0x3333333333333333ULL);
+        bb = (bb + (bb >> 4)) & 0x0F0F0F0F0F0F0F0FULL;
+        return (bb * 0x0101010101010101ULL) >> 56;
+    #endif
 }
 
 bool Board::moreThanOne(uint64_t bb) {

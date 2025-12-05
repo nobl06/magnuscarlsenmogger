@@ -92,6 +92,10 @@ constexpr Score MINOR_BEHIND_PAWN = Score(18, 3);
 constexpr Score ROOK_ON_KING_RING = Score(16, 0);
 constexpr Score BISHOP_ON_KING_RING = Score(24, 0);
 
+// Space evaluation
+constexpr Score SPACE_BONUS = Score(2, 0);
+constexpr int MIN_PIECES_FOR_SPACE = 2;
+
 // Threat bonuses
 constexpr Score THREAT_BY_MINOR[7] = {
     Score(0, 0), Score(6, 37), Score(64, 50), Score(82, 57),
@@ -649,7 +653,7 @@ std::pair<int, int> evaluateKingSafety(const Board& board) {
 }
 
 
-// ======================================== 
+// ========================================
 // Piece-Specific Evaluation
 // ========================================
 
@@ -754,12 +758,12 @@ std::pair<int, int> evaluatePieces(const Board& board) {
                                         & Board::adjacentColumnsBB(column);
                     
                     if ((enemyPawns & attackSpan) == 0) {
-                        mgScore += sign * BISHOP_OUTPOST.mg;
-                        egScore += sign * BISHOP_OUTPOST.eg;
+                    mgScore += sign * BISHOP_OUTPOST.mg;
+                    egScore += sign * BISHOP_OUTPOST.eg;
                     }
                 }
             }
-        
+            
             // Bishop shielded by friendly pawn
             int frontSq = color == WHITE ? sq + 8 : sq - 8;
             if (frontSq >= 0 && frontSq < 64 && (ourPawns & (1ULL << frontSq))) {
@@ -991,7 +995,108 @@ std::pair<int, int> evaluateThreats(const Board& board) {
     return {mgScore, egScore};
 }
 
+// ========================================
+// Space Evaluation
+// ========================================
 
+std::pair<int, int> evaluateSpace(const Board& board) {
+    int mgScore = 0;
+    int egScore = 0;
+    
+    // Check if both sides have enough pieces for space to matter
+    int whitePieces = Board::popcount(board.bitboards[WHITE][KNIGHT]) +
+                      Board::popcount(board.bitboards[WHITE][BISHOP]) +
+                      Board::popcount(board.bitboards[WHITE][ROOK]) +
+                      Board::popcount(board.bitboards[WHITE][QUEEN]);
+    
+    int blackPieces = Board::popcount(board.bitboards[BLACK][KNIGHT]) +
+                      Board::popcount(board.bitboards[BLACK][BISHOP]) +
+                      Board::popcount(board.bitboards[BLACK][ROOK]) +
+                      Board::popcount(board.bitboards[BLACK][QUEEN]);
+    
+    // Only evaluate space if both sides have at least MIN_PIECES_FOR_SPACE non-pawn pieces
+    if (whitePieces < MIN_PIECES_FOR_SPACE || blackPieces < MIN_PIECES_FOR_SPACE) {
+        return {0, 0};
+    }
+    
+    for (Color color : {WHITE, BLACK}) {
+        int sign = (color == WHITE) ? 1 : -1;
+        Color enemy = (Color)(1 - color);
+        
+        // Get enemy pawn attacks
+        uint64_t enemyPawns = board.bitboards[enemy][PAWN];
+        uint64_t enemyPawnAttacks = Board::getPawnAttacks(enemyPawns, enemy);
+        
+        uint64_t safe = ~enemyPawnAttacks;
+        
+        // Behind our pawns: squares we have already advanced past
+        uint64_t ourPawns = board.bitboards[color][PAWN];
+        uint64_t behind = 0ULL;
+        if (color == WHITE) {
+            // For white, "behind" means lower ranks (towards rank 1)
+            uint64_t temp = ourPawns;
+            while (temp) {
+                temp = Board::shiftDown(temp);
+                behind |= temp;
+            }
+        } else {
+            // For black, "behind" means higher ranks (towards rank 8)
+            uint64_t temp = ourPawns;
+            while (temp) {
+                temp = Board::shiftUp(temp);
+                behind |= temp;
+            }
+        }
+        
+        // Center 4 columns
+        uint64_t centerColumns = Board::columnBB(2) | Board::columnBB(3) | Board::columnBB(4) | Board::columnBB(5);
+        
+        // Space area
+        uint64_t spaceArea;
+        if (color == WHITE) {
+            spaceArea = Board::rowBB(1) | Board::rowBB(2) | Board::rowBB(3);
+        } else {
+            spaceArea = Board::rowBB(4) | Board::rowBB(5) | Board::rowBB(6);
+        }
+        
+        uint64_t spaceMask = centerColumns & spaceArea & behind & safe;
+        
+        // Count blocked pawns (pawns with a pawn directly in front)
+        int blockedPawns = 0;
+        uint64_t pawns = ourPawns;
+        while (pawns) {
+            int sq = Board::popLsb(pawns);
+            int row = sq / 8;
+            int col = sq % 8;
+            
+            if (color == WHITE && row < 7) {
+                int frontSq = sq + 8;
+                if (board.pieceAt(frontSq) != EMPTY) {
+                    blockedPawns++;
+                }
+            } else if (color == BLACK && row > 0) {
+                int frontSq = sq - 8;
+                if (board.pieceAt(frontSq) != EMPTY) {
+                    blockedPawns++;
+                }
+            }
+        }
+        
+        // Weight: blocked pawns + non-pawn pieces - 3
+        int pieces = (color == WHITE) ? whitePieces : blackPieces;
+        int weight = blockedPawns + pieces - 3;
+        
+        // Count safe space squares
+        int spaceCount = Board::popcount(spaceMask);
+        
+        // Apply bonus
+        int bonus = spaceCount * weight * SPACE_BONUS.mg;
+        mgScore += sign * bonus;
+        egScore += sign * spaceCount * weight * SPACE_BONUS.eg;
+    }
+    
+    return {mgScore, egScore};
+}
 
 // ========================================
 // Final Evaluation Function
@@ -1003,9 +1108,10 @@ std::pair<int, int> evaluatePositional(const Board& board) {
     auto [kingSafetyMg, kingSafetyEg] = evaluateKingSafety(board);
     auto [piecesMg, piecesEg] = evaluatePieces(board);
     auto [threatsMg, threatsEg] = evaluateThreats(board);
+    auto [spaceMg, spaceEg] = evaluateSpace(board);
 
-    int mgTotal = pawnMg + mobilityMg + kingSafetyMg + piecesMg + threatsMg;
-    int egTotal = pawnEg + mobilityEg + kingSafetyEg + piecesEg + threatsEg;
+    int mgTotal = pawnMg + mobilityMg + kingSafetyMg + piecesMg + threatsMg + spaceMg;
+    int egTotal = pawnEg + mobilityEg + kingSafetyEg + piecesEg + threatsEg + spaceEg;
     
     return {mgTotal, egTotal};
 }
