@@ -263,46 +263,42 @@ std::vector<Move> MoveGenerator::generatePseudoLegalMoves() const {
     return moves;
 }
 
-std::vector<Move> MoveGenerator::filterLegalMoves(const std::vector<Move> &pseudoLegalMoves) const {
+std::vector<Move> MoveGenerator::filterLegalMoves(const std::vector<Move> &pseudoLegalMoves) {
     std::vector<Move> legalMoves;
+    Color ourColor = color;
+    Color opponent = (ourColor == Color::WHITE) ? Color::BLACK : Color::WHITE;
 
     for (const Move &move : pseudoLegalMoves) {
-        // Make a copy of the board to test the move
-        Board testBoard = board;
-        testBoard.update_move(move);
-
-        // We check if our king is in check after the move.
-        // Note: after update_move, sideToMove has been toggled, so we check the opposite color
-        Color ourColor = (testBoard.sideToMove == Color::WHITE) ? Color::BLACK : Color::WHITE;
-
-        // check if the castling move is legal
         PieceType movedPiece = board.pieceAt(move.from);
+        
+        // Handle castling specially - need to check if king passes through check
         if (movedPiece == PieceType::KING && std::abs(static_cast<int>(move.to) - static_cast<int>(move.from)) == 2) {
-            int fromCol = Board::column(move.from);
-            int toCol = Board::column(move.to);
-            int row = Board::row(move.from);
-
-            // Check if the king is in check before castling
+            // King can't castle out of check
             if (board.isKingInCheck(ourColor)) {
                 continue;
             }
-
-            // Check if the king is in check while castling
+            
+            // Check if king passes through attacked square
+            int fromCol = Board::column(move.from);
+            int toCol = Board::column(move.to);
+            int row = Board::row(move.from);
             int middleCol = (fromCol + toCol) / 2;
             int middleSq = Board::position(middleCol, row);
-            if (board.isSquareAttackedBy(middleSq, (ourColor == Color::WHITE) ? Color::BLACK : Color::WHITE)) {
+            
+            if (board.isSquareAttackedBy(middleSq, opponent)) {
                 continue;
             }
         }
 
-        if (!testBoard.isKingInCheck(ourColor)) {
+        // Use makeMove/unmakeMove instead of copying the entire board
+        BoardState state = board.makeMove(move);
+        bool legal = !board.isKingInCheck(ourColor);
+        board.unmakeMove(move, state);
+        
+        if (legal) {
             legalMoves.emplace_back(move);
         }
     }
 
     return legalMoves;
-}
-
-Move chooseMove(const std::vector<Move> &legalMoves) {
-    return legalMoves[0];
 }

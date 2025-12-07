@@ -199,5 +199,4 @@ Move findBestMove(Board &board, int depth) {
     return bestMove;
 }
 } // namespace Search
-
 //
