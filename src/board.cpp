@@ -1,5 +1,6 @@
 #include "board.h"
 #include "move.h"
+#include "zobrist.h"
 #include <cstdlib>
 #include <iostream>
 
@@ -19,6 +20,10 @@ void Board::clear() // clear function (no board)
     blackCanQueenside = false;
     enPassantTarget = -1;
     sideToMove = Color::WHITE;
+    
+    // Initialize hash
+    hashKey = 0ULL;
+    hashHistory.clear();
 }
 
 void Board::initStartPosition() // initializing the piece position using a bitboard
@@ -54,6 +59,9 @@ void Board::initStartPosition() // initializing the piece position using a bitbo
     blackCanQueenside = true;
     enPassantTarget = -1;
     sideToMove = Color::WHITE;
+    
+    // Compute initial hash
+    hashKey = Zobrist::computeHash(*this);
 }
 
 void Board::print() const { // printing the board with current positions
@@ -252,6 +260,37 @@ void Board::update_move(Move m) {
     sideToMove = (sideToMove == Color::WHITE) ? Color::BLACK : Color::WHITE;
 }
 
+uint64_t Board::computeHash() const {
+    return Zobrist::computeHash(*this);
+}
+
+bool Board::isThreefoldRepetition() const {
+    // Count occurrences of current position
+    int count = 0;
+    
+    // Search backwards through history
+    // We can only have repetition after reversible moves
+    // (moves that don't capture, move pawns, or change castling rights)
+    for (size_t i = hashHistory.size(); i > 0; --i) {
+        if (hashHistory[i - 1] == hashKey) {
+            count++;
+            if (count >= 2) {  // Current position + 2 previous = 3 times
+                return true;
+            }
+        }
+        
+        // Optimization: we can stop at the last irreversible move
+        // For now, we check all history (can be optimized later)
+    }
+    
+    return false;
+}
+
+int Board::getPlySinceIrreversible() const {
+    // For now, return history size (can be optimized with halfmove counter)
+    return static_cast<int>(hashHistory.size());
+}
+
 BoardState Board::makeMove(const Move& m) {
     // Save state for unmake
     BoardState state;
@@ -263,7 +302,10 @@ BoardState Board::makeMove(const Move& m) {
     state.blackCanKingside = blackCanKingside;
     state.blackCanQueenside = blackCanQueenside;
     
-    // get move info
+    // Push current hash to history BEFORE making the move
+    hashHistory.push_back(hashKey);
+    
+    // Get move info
     PieceType fpt = pieceAt(m.from);
     Color fc = colorAt(m.from);
     PieceType finaltype = (m.promotion != PieceType::EMPTY) ? m.promotion : fpt;
@@ -271,9 +313,29 @@ BoardState Board::makeMove(const Move& m) {
     std::uint64_t maskFrom = 1ULL << m.from;
     std::uint64_t maskTo = 1ULL << m.to;
     
+    // XOR out old castling rights
+    int oldCastlingIndex = Zobrist::getCastlingIndex(
+        whiteCanKingside, whiteCanQueenside, blackCanKingside, blackCanQueenside
+    );
+    hashKey ^= Zobrist::castlingKeys[oldCastlingIndex];
+    
+    // XOR out old en passant
+    if (enPassantTarget != -1) {
+        int oldEpFile = column(enPassantTarget);
+        hashKey ^= Zobrist::enPassantKeys[oldEpFile];
+    }
+    
     // Clear en passant target
     int oldEnPassant = enPassantTarget;
     enPassantTarget = -1;
+    
+    // XOR out piece from source square
+    hashKey ^= Zobrist::pieceKeys[fc][fpt][m.from];
+    
+    // Handle captures (XOR out captured piece)
+    if (state.capturedPiece != PieceType::EMPTY) {
+        hashKey ^= Zobrist::pieceKeys[state.capturedColor][state.capturedPiece][m.to];
+    }
     
     // Handle castling move (king moving 2 squares)
     if (fpt == PieceType::KING && std::abs(m.to - m.from) == 2) {
@@ -288,6 +350,10 @@ BoardState Board::makeMove(const Move& m) {
             std::uint64_t rookMaskFrom = 1ULL << rookFrom;
             std::uint64_t rookMaskTo = 1ULL << rookTo;
             
+            // XOR out rook from old square, XOR in to new square
+            hashKey ^= Zobrist::pieceKeys[fc][ROOK][rookFrom];
+            hashKey ^= Zobrist::pieceKeys[fc][ROOK][rookTo];
+            
             bitboards[fc][ROOK] &= ~rookMaskFrom;
             bitboards[fc][ROOK] |= rookMaskTo;
         }
@@ -298,6 +364,10 @@ BoardState Board::makeMove(const Move& m) {
             std::uint64_t rookMaskFrom = 1ULL << rookFrom;
             std::uint64_t rookMaskTo = 1ULL << rookTo;
             
+            // XOR out rook from old square, XOR in to new square
+            hashKey ^= Zobrist::pieceKeys[fc][ROOK][rookFrom];
+            hashKey ^= Zobrist::pieceKeys[fc][ROOK][rookTo];
+            
             bitboards[fc][ROOK] &= ~rookMaskFrom;
             bitboards[fc][ROOK] |= rookMaskTo;
         }
@@ -307,7 +377,12 @@ BoardState Board::makeMove(const Move& m) {
     if (fpt == PieceType::PAWN && m.to == oldEnPassant) {
         int capturedPawnSquare = m.to + (fc == Color::WHITE ? -8 : 8);
         std::uint64_t capturedMask = 1ULL << capturedPawnSquare;
-        bitboards[fc == WHITE ? BLACK : WHITE][PAWN] &= ~capturedMask;
+        
+        // XOR out the captured pawn
+        Color enemyColor = (fc == WHITE) ? BLACK : WHITE;
+        hashKey ^= Zobrist::pieceKeys[enemyColor][PAWN][capturedPawnSquare];
+        
+        bitboards[enemyColor][PAWN] &= ~capturedMask;
     }
     
     // set en passant target if pawn moved 2 squares
@@ -323,8 +398,12 @@ BoardState Board::makeMove(const Move& m) {
     // remove piece from source
     bitboards[fc][fpt] &= ~maskFrom;
     
-    //place piece at destination
+    // place piece at destination (XOR in the piece)
     bitboards[fc][finaltype] |= maskTo;
+    hashKey ^= Zobrist::pieceKeys[fc][finaltype][m.to];
+    
+    // Handle promotion (we already XORed out the pawn, now XOR in the promoted piece)
+    // (already handled above with finaltype)
     
     // update castling rights
     if (fpt == PieceType::KING) {
@@ -356,13 +435,34 @@ BoardState Board::makeMove(const Move& m) {
         if (m.to == position(7, 7)) blackCanKingside = false;
     }
     
+    // XOR in new castling rights
+    int newCastlingIndex = Zobrist::getCastlingIndex(
+        whiteCanKingside, whiteCanQueenside, blackCanKingside, blackCanQueenside
+    );
+    hashKey ^= Zobrist::castlingKeys[newCastlingIndex];
+    
+    // XOR in new en passant
+    if (enPassantTarget != -1) {
+        int newEpFile = column(enPassantTarget);
+        hashKey ^= Zobrist::enPassantKeys[newEpFile];
+    }
+    
     // toggle side to move
     sideToMove = (sideToMove == Color::WHITE) ? Color::BLACK : Color::WHITE;
+    
+    // XOR side to move
+    hashKey ^= Zobrist::sideKey;
     
     return state;
 }
 
 void Board::unmakeMove(const Move& m, const BoardState& state) {
+    // Pop hash from history
+    if (!hashHistory.empty()) {
+        hashKey = hashHistory.back();
+        hashHistory.pop_back();
+    }
+    
     // toggle side to move back
     sideToMove = (sideToMove == Color::WHITE) ? Color::BLACK : Color::WHITE;
     
