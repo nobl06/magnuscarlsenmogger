@@ -1,6 +1,7 @@
 #pragma once
 #include "board.h"
 #include "move.h"
+#include "tt.h"
 #include <cstdint>
 
 namespace Search {
@@ -46,7 +47,7 @@ struct Info {
 Move findBestMove(Board &board, int depth);
 
 // Internal alpha-beta function
-int alphaBeta(Board &board, int depth, int alpha, int beta, int ply);
+int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, Move* bestMoveOut = nullptr);
 
 // Helper function
 int getMateScore(int ply);
