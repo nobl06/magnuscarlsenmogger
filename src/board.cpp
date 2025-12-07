@@ -280,7 +280,7 @@ bool Board::isThreefoldRepetition() const {
         }
         
         // Optimization: we can stop at the last irreversible move
-        // For now, we check all history (can be optimized later)
+        // For now, we check all history (we'll optimize this later)
     }
     
     return false;
@@ -302,7 +302,7 @@ BoardState Board::makeMove(const Move& m) {
     state.blackCanKingside = blackCanKingside;
     state.blackCanQueenside = blackCanQueenside;
     
-    // Push current hash to history BEFORE making the move
+    // Push current hash to history before making the move
     hashHistory.push_back(hashKey);
     
     // Get move info
