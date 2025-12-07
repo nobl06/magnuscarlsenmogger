@@ -5,6 +5,8 @@
 #include "gen.hpp"
 #include "move.h"
 #include "search.h"
+#include "zobrist.h"
+#include "tt.h"
 #include <chrono>
 #include <fstream>
 #include <iostream>
@@ -45,6 +47,12 @@ int main(int argc, char *argv[]) {
 
     // Initialize piece-square tables
     PSQT::init();
+    
+    // Initialize Zobrist hashing
+    Zobrist::init();
+    
+    // Initialize transposition table (already initialized globally, but clear it)
+    TT::tt.clear();
 
     std::string inputfile;
     std::string outputfile;
