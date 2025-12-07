@@ -108,6 +108,21 @@ class Board {
     bool blackCanQueenside;
     int enPassantTarget; // -1 if none, otherwise square index (0-63)
     Color sideToMove;
+    
+    // Zobrist hash key
+    uint64_t hashKey;
+    
+    // History for repetition detection
+    std::vector<uint64_t> hashHistory;
+    
+    // Compute hash from scratch (for debugging)
+    uint64_t computeHash() const;
+    
+    // Check for threefold repetition
+    bool isThreefoldRepetition() const;
+    
+    // Get the ply since last irreversible move (for repetition detection)
+    int getPlySinceIrreversible() const;
 
     // Attack and check detection
     bool isSquareAttackedBy(int square, Color attackerColor) const;
