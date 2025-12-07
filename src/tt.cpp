@@ -21,6 +21,7 @@ namespace TT {
         table.resize(size);
     }
     
+    
     TTEntry* TranspositionTable::probe(uint64_t key) {
         size_t index = getIndex(key);
         TTEntry* entry = &table[index];
@@ -37,8 +38,7 @@ namespace TT {
         size_t index = getIndex(key);
         TTEntry* entry = &table[index];
         
-        // Always replace strategy: replace if empty or new depth >= stored depth
-        // This is a simple scheme; more sophisticated schemes exist (age-based, etc.)
+        // Replace if empty or new depth >= stored depth
         if (entry->key == 0 || depth >= entry->depth) {
             entry->key = key;
             entry->value = static_cast<int16_t>(value);
