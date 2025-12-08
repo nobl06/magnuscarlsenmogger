@@ -12,6 +12,8 @@
 #include "../src/gen.hpp"
 #include "../src/move.h"
 #include "../src/search.h"
+#include "../src/zobrist.h"
+#include "../src/tt.h"
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -175,7 +177,8 @@ void uciLoop() {
         else if (token == "ucinewgame") {
             board = Board();
             board.initStartPosition();
-            // Could clear transposition tables here if implemented
+            // Clear transposition table for new game
+            TT::tt.clear();
         } 
         else if (token == "position") {
             handlePosition(board, is);
@@ -193,6 +196,12 @@ void uciLoop() {
 int main() {
     // Initialize piece-square tables
     PSQT::init();
+    
+    // Initialize Zobrist hashing (required for TT)
+    Zobrist::init();
+    
+    // Clear transposition table
+    TT::tt.clear();
     
     // Disable output buffering for proper UCI communication
     std::cout.setf(std::ios::unitbuf);

@@ -1,4 +1,4 @@
-#!/bin/bashgit
+#!/bin/bash
 # Elo Testing Script for MagnusCarlsenMogger
 # Usage: ./test_elo.sh [opponent_elo] [num_games]
 #

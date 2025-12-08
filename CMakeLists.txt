@@ -28,6 +28,8 @@ add_executable(MagnusCarlsenMogger_UCI
     src/move.cpp
     src/gen.cpp
     src/search.cpp
+    src/zobrist.cpp
+    src/tt.cpp
     src/eval/evaluate.cpp
     src/eval/psqt.cpp
     src/eval/material.cpp

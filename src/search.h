@@ -52,6 +52,42 @@ int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, Move* bestM
 // Helper function
 int getMateScore(int ply);
 
+// Killer moves: stores 2 quiet moves per ply that caused beta cutoffs
+struct KillerMoves {
+    Move moves[2];
+    
+    // Helper to compare moves
+    static bool sameMove(const Move& a, const Move& b) {
+        return (a.from == b.from && a.to == b.to && a.promotion == b.promotion);
+    }
+    
+    void add(const Move& m) {
+        // Don't add if already first killer
+        if (sameMove(moves[0], m)) return;
+        // Shift: move[0] becomes move[1], new move becomes move[0]
+        moves[1] = moves[0];
+        moves[0] = m;
+    }
+    
+    void clear() {
+        moves[0] = Move();
+        moves[1] = Move();
+    }
+    
+    bool isKiller(const Move& m) const {
+        return (sameMove(m, moves[0]) || sameMove(m, moves[1]));
+    }
+};
+
+// History heuristic: [from][to] -> score
+// Tracks how often a move causes a beta cutoff
+constexpr int HISTORY_MAX = 10000;  // Cap to prevent overflow
+extern KillerMoves killers[MAX_PLY];
+extern int history[64][64];
+
+// Move ordering function
+int scoreMove(const Move& move, const Board& board, int ply);
+
 // Global statistics
 extern Stats stats;
 extern Info info;
