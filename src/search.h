@@ -85,6 +85,11 @@ constexpr int HISTORY_MAX = 10000;  // Cap to prevent overflow
 extern KillerMoves killers[MAX_PLY];
 extern int history[64][64];
 
+// Late Move Reduction
+constexpr int LMR_TABLE_SIZE = 64;
+extern int reductionTable[LMR_TABLE_SIZE][LMR_TABLE_SIZE];
+void initReductions();
+
 // Move ordering function
 int scoreMove(const Move& move, const Board& board, int ply);
 

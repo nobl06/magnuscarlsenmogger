@@ -5,6 +5,7 @@
 #include "zobrist.h"
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <iostream>
 
 std::chrono::steady_clock::time_point start_time; // Initialize timer
@@ -24,6 +25,19 @@ Info info;
 // Killer moves and history tables
 KillerMoves killers[MAX_PLY];
 int history[64][64] = {0};
+
+// Late Move Reduction table
+int reductionTable[LMR_TABLE_SIZE][LMR_TABLE_SIZE];
+
+// Initialize LMR reduction table
+void initReductions() {
+    for (int depth = 1; depth < LMR_TABLE_SIZE; ++depth) {
+        for (int moves = 1; moves < LMR_TABLE_SIZE; ++moves) {
+            // base reduction based on depth and move count
+            reductionTable[depth][moves] = int(0.5 + std::log(depth) * std::log(moves) / 2.25);
+        }
+    }
+}
 
 // Search path tracking for repetition detection
 static uint64_t searchPath[MAX_PLY];
@@ -206,6 +220,11 @@ int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, bool pvNode
         
         moveCount++;
         
+        // Check if this is a tactical move (capture or promotion)
+        PieceType victim = board.pieceAt(move.to);
+        bool isCapture = (victim != PieceType::EMPTY);
+        bool isPromotion = (move.promotion != PieceType::EMPTY);
+        
         // make/unmake method (efficient - no board copying)
         BoardState state = board.makeMove(move);
         
@@ -215,8 +234,47 @@ int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, bool pvNode
         // Initialize child PV for this move
         childPv[0] = Move();
         
-        // recursive call with negated window and child PV
-        int score = -alphaBeta(board, depth - 1, -beta, -alpha, ply + 1, childPvNode, childPv);
+        int score;
+        
+        // === Late Move Reduction (LMR) ===
+        // First move: always search at full depth with full window
+        if (moveCount == 1) {
+            score = -alphaBeta(board, depth - 1, -beta, -alpha, ply + 1, childPvNode, childPv);
+        }
+        // Later moves: use LMR with re-search
+        else {
+            // Calculate reduction for non-tactical quiet moves
+            int reduction = 0;
+            
+            // Only reduce quiet moves at sufficient depth
+            if (depth >= 3 && !isCapture && !isPromotion) {
+                // Get base reduction from table
+                int d = std::min(depth, LMR_TABLE_SIZE - 1);
+                int m = std::min(moveCount, LMR_TABLE_SIZE - 1);
+                reduction = reductionTable[d][m];
+                
+                // Don't reduce too much
+                reduction = std::min(reduction, depth - 2);
+            }
+            
+            // Step 1: Search with reduced depth and null window
+            if (reduction > 0) {
+                score = -alphaBeta(board, depth - 1 - reduction, -(alpha + 1), -alpha, ply + 1, false, childPv);
+            } else {
+                // No reduction: just null window search (PVS)
+                score = -alphaBeta(board, depth - 1, -(alpha + 1), -alpha, ply + 1, false, childPv);
+            }
+            
+            // Step 2: If reduced search failed high, re-search at full depth with null window
+            if (reduction > 0 && score > alpha) {
+                score = -alphaBeta(board, depth - 1, -(alpha + 1), -alpha, ply + 1, false, childPv);
+            }
+            
+            // Step 3: If still failed high and we're in PV node, re-search with full window
+            if (score > alpha && score < beta && pvNode) {
+                score = -alphaBeta(board, depth - 1, -beta, -alpha, ply + 1, true, childPv);
+            }
+        }
         
         // unmake the move to restore board state
         board.unmakeMove(move, state);
@@ -243,8 +301,7 @@ int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, bool pvNode
         // If score >= beta, opponent won't allow this line
         if (score >= beta) {
             // Update killer moves and history for quiet moves
-            PieceType victim = board.pieceAt(move.to);
-            if (victim == PieceType::EMPTY && move.promotion == PieceType::EMPTY) {
+            if (!isCapture && !isPromotion) {
                 // Killer moves: store quiet move that caused cutoff
                 killers[ply].add(move);
                 
@@ -292,6 +349,13 @@ Move findBestMove(Board &board, int depth) {
     stats.reset();
     info.reset();
     info.maxDepth = depth;
+    
+    // Initialize LMR reduction table
+    static bool reductionsInitialized = false;
+    if (!reductionsInitialized) {
+        initReductions();
+        reductionsInitialized = true;
+    }
     
     // Increment TT generation for new search
     TT::tt.new_search();
