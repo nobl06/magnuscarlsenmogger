@@ -25,17 +25,27 @@ Info info;
 KillerMoves killers[MAX_PLY];
 int history[64][64] = {0};
 
-// Search path tracking for 2-fold repetition detection
+// Search path tracking for repetition detection
 static uint64_t searchPath[MAX_PLY];
 
-// Check if current position appears in search path (prevents cycles in search)
-inline bool isRepetitionInSearchPath(uint64_t hashKey, int ply) {
-    // Check every 2 plies (same side to move)
+//Check if we have an upcoming repetition
+// Combines game history + search path (unified check)
+inline bool upcoming_repetition(const Board& board, uint64_t hashKey, int ply) {
+    // Only check every 2 plies (same side to move)
     for (int i = ply - 2; i >= 0; i -= 2) {
         if (searchPath[i] == hashKey) {
             return true;
         }
     }
+    
+    // Check game history (positions that happened before search)
+    // These were played in the actual game
+    for (const auto& h : board.hashHistory) {
+        if (h == hashKey) {
+            return true;
+        }
+    }
+    
     return false;
 }
 
@@ -78,8 +88,28 @@ int getMateScore(int ply) {
     return -MATE_SCORE + ply;
 }
 
-// alpha-beta search with TT integration (Stockfish-style)
-int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, Move* bestMoveOut) {
+// Adjusts mate scores from "plies to mate from root" to "plies to mate from current position"
+inline int value_to_tt(int v, int ply) {
+    if (v >= MATE_SCORE - MAX_PLY)
+        return v + ply;  // Mate in X moves
+    if (v <= -MATE_SCORE + MAX_PLY)
+        return v - ply;  // Mated in X moves
+    return v;
+}
+
+// Inverse: adjusts from "plies to mate from current position" to "plies to mate from root"
+inline int value_from_tt(int v, int ply) {
+    if (v >= MATE_SCORE - MAX_PLY)
+        return v - ply;
+    if (v <= -MATE_SCORE + MAX_PLY)
+        return v + ply;
+    return v;
+}
+
+// alpha-beta search with TT integration
+int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, bool pvNode, Move* pv, Move* bestMoveOut) {
+    // Initialize PV
+    if (pv) pv[0] = Move();
     if (out_of_time()) return alpha;
     
     int originalAlpha = alpha;
@@ -90,14 +120,9 @@ int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, Move* bestM
     // Store position in search path for repetition detection
     searchPath[ply] = hashKey;
     
-    // REPETITION CHECK FIRST
-    // Check for 2-fold in search path (upcoming repetition)
-    if (ply > 0 && isRepetitionInSearchPath(hashKey, ply)) {
-        return 0;
-    }
-    
-    // Check for threefold repetition in game history
-    if (board.isThreefoldRepetition()) {
+    // Prevent TT from suggesting moves that lead to repetition
+    if (ply > 0 && upcoming_repetition(board, hashKey, ply)) {
+        // Return draw score
         return 0;
     }
     
@@ -105,28 +130,29 @@ int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, Move* bestM
     TT::TTEntry* ttEntry = TT::tt.probe(hashKey);
     Move ttMove;
     
-    // TT probe for move ordering and cutoffs
-    if (ttEntry != nullptr && ttEntry->depth >= depth) {
+    // TT CUTOFFS only at NON-PV nodes
+    // PV nodes (root and expected best line) always get full search
+    if (!pvNode && ttEntry != nullptr && ttEntry->depth >= depth) {
         ttMove = ttEntry->bestMove;
         
-        // TT CUTOFFS - only at ply >= 3 (avoid repetition issues near root)
-        if (ply >= 3) {
-            if (ttEntry->type == TT::EXACT) {
+        // Adjust mate scores from TT
+        int ttValue = value_from_tt(ttEntry->value, ply);
+        
+        if (ttEntry->type == TT::EXACT) {
+            if (bestMoveOut) *bestMoveOut = ttMove;
+            return ttValue;
+        } else if (ttEntry->type == TT::LOWERBOUND) {
+            if (ttValue >= beta) {
                 if (bestMoveOut) *bestMoveOut = ttMove;
-                return ttEntry->value;
-            } else if (ttEntry->type == TT::LOWERBOUND) {
-                if (ttEntry->value >= beta) {
-                    if (bestMoveOut) *bestMoveOut = ttMove;
-                    return beta;
-                }
-                alpha = std::max(alpha, (int)ttEntry->value);
-            } else if (ttEntry->type == TT::UPPERBOUND) {
-                if (ttEntry->value <= alpha) {
-                    if (bestMoveOut) *bestMoveOut = ttMove;
-                    return alpha;
-                }
-                beta = std::min(beta, (int)ttEntry->value);
+                return beta;
             }
+            alpha = std::max(alpha, ttValue);
+        } else if (ttEntry->type == TT::UPPERBOUND) {
+            if (ttValue <= alpha) {
+                if (bestMoveOut) *bestMoveOut = ttMove;
+                return alpha;
+            }
+            beta = std::min(beta, ttValue);
         }
     } else if (ttEntry != nullptr) {
         // TT hit but insufficient depth - still use for move ordering
@@ -170,15 +196,27 @@ int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, Move* bestM
     // alpha-beta loop
     int bestScore = -INFINITY_SCORE;
     Move bestMove = legalMoves[0];
+    int moveCount = 0;
+    
+    // Child PV array
+    Move childPv[MAX_PLY];
     
     for (const Move &move : legalMoves) {
         if (out_of_time()) break;
         
+        moveCount++;
+        
         // make/unmake method (efficient - no board copying)
         BoardState state = board.makeMove(move);
         
-        // recursive call with negated window
-        int score = -alphaBeta(board, depth - 1, -beta, -alpha, ply + 1);
+        // PV tracking:
+        bool childPvNode = pvNode && (moveCount == 1 || alpha > originalAlpha);
+        
+        // Initialize child PV for this move
+        childPv[0] = Move();
+        
+        // recursive call with negated window and child PV
+        int score = -alphaBeta(board, depth - 1, -beta, -alpha, ply + 1, childPvNode, childPv);
         
         // unmake the move to restore board state
         board.unmakeMove(move, state);
@@ -186,10 +224,19 @@ int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, Move* bestM
         if (out_of_time()) break;
         
         // if this move is better than any seen so far
-        // update best score
+        // update best score and PV
         if (score > bestScore) {
             bestScore = score;
             bestMove = move;
+            
+            // Update PV: current move + child's PV
+            if (pv) {
+                pv[0] = move;
+                for (int i = 0; i < MAX_PLY - 1 && childPv[i].from != 0; i++) {
+                    pv[i + 1] = childPv[i];
+                }
+                pv[MAX_PLY - 1] = Move();
+            }
         }
         
         // beta cutoff - check first for efficiency
@@ -232,7 +279,9 @@ int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, Move* bestM
         nodeType = TT::EXACT;  // PV node - exact score
     }
     
-    TT::tt.store(hashKey, bestScore, depth, nodeType, bestMove);
+    // Adjust mate scores for TT storage
+    int ttScore = value_to_tt(bestScore, ply);
+    TT::tt.store(hashKey, ttScore, depth, nodeType, bestMove);
     
     if (bestMoveOut) *bestMoveOut = bestMove;
     return bestScore;
@@ -243,6 +292,9 @@ Move findBestMove(Board &board, int depth) {
     stats.reset();
     info.reset();
     info.maxDepth = depth;
+    
+    // Increment TT generation for new search
+    TT::tt.new_search();
     
     // Clear killer moves for new search
     for (int i = 0; i < MAX_PLY; i++) {
@@ -295,6 +347,10 @@ Move findBestMove(Board &board, int depth) {
     Move bestMove = legalMoves[0];
     int bestScore = -INFINITY_SCORE;
     
+    // PV from previous iteration
+    Move previousPv[MAX_PLY];
+    for (int i = 0; i < MAX_PLY; i++) previousPv[i] = Move();
+    
     // Iterative deepening
     for (int currentDepth = 1; currentDepth <= depth; currentDepth++) {
         auto layer_start = std::chrono::steady_clock::now(); // Timing a depth
@@ -305,12 +361,33 @@ Move findBestMove(Board &board, int depth) {
         Move bestMoveThisIter = legalMoves[0];
         int bestScoreThisIter = -INFINITY_SCORE;
         
+        // PV for current iteration
+        Move currentPv[MAX_PLY];
+        for (int i = 0; i < MAX_PLY; i++) currentPv[i] = Move();
+        
+        // Re-sort moves using PV from previous iteration
+        if (currentDepth > 1 && previousPv[0].from != 0) {
+            for (Move &move : legalMoves) {
+                // PV move from previous iteration gets highest priority
+                if (move.from == previousPv[0].from && move.to == previousPv[0].to &&
+                    move.promotion == previousPv[0].promotion) {
+                    move.score = 3000000;
+                }
+            }
+            std::sort(legalMoves.begin(), legalMoves.end(),
+                      [](const Move &a, const Move &b) { return a.score > b.score; });
+        }
+        
         for (const Move &move : legalMoves) {
             if (out_of_time()) break;
             
+            // Child PV for this move
+            Move childPv[MAX_PLY];
+            for (int i = 0; i < MAX_PLY; i++) childPv[i] = Move();
+            
             BoardState state = board.makeMove(move);
-            Move childBestMove;
-            int score = -alphaBeta(board, currentDepth - 1, -beta, -alpha, 1, &childBestMove);
+            // Root is always PV node - pass childPv array
+            int score = -alphaBeta(board, currentDepth - 1, -beta, -alpha, 1, true, childPv);
             board.unmakeMove(move, state);
             
             if (out_of_time()) break;
@@ -318,6 +395,12 @@ Move findBestMove(Board &board, int depth) {
             if (score > bestScoreThisIter) {
                 bestScoreThisIter = score;
                 bestMoveThisIter = move;
+                
+                // Update current iteration's PV
+                currentPv[0] = move;
+                for (int i = 0; i < MAX_PLY - 1 && childPv[i].from != 0; i++) {
+                    currentPv[i + 1] = childPv[i];
+                }
             }
             
             if (score > alpha) {
@@ -335,10 +418,15 @@ Move findBestMove(Board &board, int depth) {
         
         if (out_of_time()) break;
         
-        // Depth completed, update global best move
+        // Depth completed, update global best move and PV
         bestMove = bestMoveThisIter;
         bestScore = bestScoreThisIter;
         stats.depthReached = currentDepth;
+        
+        // Copy current PV to previous PV for next iteration 
+        for (int i = 0; i < MAX_PLY; i++) {
+            previousPv[i] = currentPv[i];
+        }
     }
     
     return bestMove;

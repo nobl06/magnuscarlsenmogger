@@ -47,7 +47,7 @@ struct Info {
 Move findBestMove(Board &board, int depth);
 
 // Internal alpha-beta function
-int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, Move* bestMoveOut = nullptr);
+int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, bool pvNode, Move* pv, Move* bestMoveOut = nullptr);
 
 // Helper function
 int getMateScore(int ply);
