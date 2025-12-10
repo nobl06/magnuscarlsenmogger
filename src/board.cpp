@@ -553,6 +553,37 @@ void Board::unmakeMove(const Move& m, const BoardState& state) {
     updateCachedBitboards();
 }
 
+// Make null move for null move pruning (we pass our turn)
+void Board::makeNullMove() {
+    // Save en passant target
+    savedEnPassant = enPassantTarget;
+    
+    // Clear en passant (can't capture en passant after passing)
+    if (enPassantTarget != -1) {
+        int epFile = column(enPassantTarget);
+        hashKey ^= Zobrist::enPassantKeys[epFile];
+        enPassantTarget = -1;
+    }
+    
+    // Switch side to move
+    sideToMove = (sideToMove == WHITE) ? BLACK : WHITE;
+    hashKey ^= Zobrist::sideKey;
+}
+
+// Unmake null move 
+void Board::unmakeNullMove() {
+    // Restore side to move
+    sideToMove = (sideToMove == WHITE) ? BLACK : WHITE;
+    hashKey ^= Zobrist::sideKey;
+    
+    // Restore en passant target
+    if (savedEnPassant != -1) {
+        int epFile = column(savedEnPassant);
+        hashKey ^= Zobrist::enPassantKeys[epFile];
+    }
+    enPassantTarget = savedEnPassant;
+}
+
 std::uint64_t Board::getAllWhitePieces() const {
     return whitePiecesBB;
 }

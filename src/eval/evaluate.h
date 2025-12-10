@@ -10,7 +10,7 @@ enum class EvalMode {
 };
 
 // Set this to switch between evaluation modes
-constexpr EvalMode EVAL_MODE = EvalMode::ADVANCED;  // Change to ADVANCED for full eval
+constexpr EvalMode EVAL_MODE = EvalMode::ADVANCED;
 
 // Main evaluation functions
 int evaluate(const Board& board);           // calls basic or advanced

@@ -121,7 +121,7 @@ inline int value_from_tt(int v, int ply) {
 }
 
 // alpha-beta search with TT integration
-int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, bool pvNode, Move* pv, Move* bestMoveOut) {
+int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, bool pvNode, Move* pv, Move* bestMoveOut, bool isNullMove) {
     // Initialize PV
     if (pv) pv[0] = Move();
     if (out_of_time()) return alpha;
@@ -176,6 +176,31 @@ int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, bool pvNode
     // terminal node - return evaluation
     if (depth == 0) {
         return Evaluation::evaluate(board);
+    }
+    
+    
+    // Check if in endgame
+    bool inEndgame = (board.bitboards[board.sideToMove][KNIGHT] == 0 && 
+                      board.bitboards[board.sideToMove][BISHOP] == 0 &&
+                      board.bitboards[board.sideToMove][ROOK] == 0 &&
+                      board.bitboards[board.sideToMove][QUEEN] == 0);
+    
+    // Null move pruning
+    if (depth >= 3 && !pvNode && !isNullMove && !inEndgame && !board.isKingInCheck(board.sideToMove)) {
+        // Make null move (pass turn)
+        board.makeNullMove();
+        
+        // Search with reduced depth
+        int R = 3;  // Reduction amount
+        int nullScore = -alphaBeta(board, depth - R, -beta, -beta + 1, ply + 1, false, nullptr, nullptr, true);
+        
+        // Unmake null move
+        board.unmakeNullMove();
+        
+        // If position is too good
+        if (nullScore >= beta) {
+            return beta;  // Beta cutoff
+        }
     }
     
     // generate moves
