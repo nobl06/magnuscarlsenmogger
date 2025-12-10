@@ -27,5 +27,8 @@ move_test
 # VSCode
 .vscode/
 
+# Cursor
+.cursor/
+
 # CLion
 .idea/

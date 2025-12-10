@@ -13,6 +13,11 @@ void Board::clear() // clear function (no board)
         }
     }
 
+    //Clear cached bitboards
+    whitePiecesBB = 0ULL;
+    blackPiecesBB = 0ULL;
+    allPiecesBB = 0ULL;
+
     // Initialize game state
     whiteCanKingside = false;
     whiteCanQueenside = false;
@@ -59,6 +64,14 @@ void Board::initStartPosition() // initializing the piece position using a bitbo
     blackCanQueenside = true;
     enPassantTarget = -1;
     sideToMove = Color::WHITE;
+    
+    whitePiecesBB = 0ULL;
+    blackPiecesBB = 0ULL;
+    for (int pt = PAWN; pt <= KING; ++pt) {
+        whitePiecesBB |= bitboards[WHITE][pt];
+        blackPiecesBB |= bitboards[BLACK][pt];
+    }
+    allPiecesBB = whitePiecesBB | blackPiecesBB;
     
     // Compute initial hash
     hashKey = Zobrist::computeHash(*this);
@@ -154,7 +167,7 @@ Color Board::colorAt(int square) const {
     if (getAllBlackPieces() & mask)
         return Color::BLACK;
 
-    return Color::WHITE;
+    return Color::NO_COLOR;
 }
 
 void Board::update_move(Move m) {
@@ -258,6 +271,12 @@ void Board::update_move(Move m) {
 
     // Toggle side to move
     sideToMove = (sideToMove == Color::WHITE) ? Color::BLACK : Color::WHITE;
+
+    // Update cached bitboards
+    updateCachedBitboards();
+
+    // Update hash
+    hashKey = Zobrist::computeHash(*this);
 }
 
 uint64_t Board::computeHash() const {
@@ -357,6 +376,7 @@ BoardState Board::makeMove(const Move& m) {
             bitboards[fc][ROOK] &= ~rookMaskFrom;
             bitboards[fc][ROOK] |= rookMaskTo;
         }
+
         // queenside castling
         else {
             int rookFrom = position(0, row);
@@ -391,9 +411,9 @@ BoardState Board::makeMove(const Move& m) {
     }
     
     // remove piece at destination (capture)
-    for (int c = 0; c < 2; ++c)
-        for (int pt = PAWN; pt <= KING; ++pt)
-            bitboards[c][pt] &= ~maskTo;
+    if (state.capturedPiece != PieceType::EMPTY) {
+        bitboards[state.capturedColor][state.capturedPiece] &= ~maskTo;
+    }
     
     // remove piece from source
     bitboards[fc][fpt] &= ~maskFrom;
@@ -453,6 +473,10 @@ BoardState Board::makeMove(const Move& m) {
     // XOR side to move
     hashKey ^= Zobrist::sideKey;
     
+
+    // Update cached bitboards
+    updateCachedBitboards();
+
     return state;
 }
 
@@ -525,24 +549,31 @@ void Board::unmakeMove(const Move& m, const BoardState& state) {
     whiteCanQueenside = state.whiteCanQueenside;
     blackCanKingside = state.blackCanKingside;
     blackCanQueenside = state.blackCanQueenside;
+
+    // Update cached bitboards
+    updateCachedBitboards();
 }
 
 std::uint64_t Board::getAllWhitePieces() const {
-    uint64_t bb = 0ULL;
-    for (int pt = PAWN; pt <= KING; ++pt)
-        bb |= bitboards[WHITE][pt];
-    return bb;
+    return whitePiecesBB;
 }
 
 std::uint64_t Board::getAllBlackPieces() const {
-    uint64_t bb = 0ULL;
-    for (int pt = PAWN; pt <= KING; ++pt)
-        bb |= bitboards[BLACK][pt];
-    return bb;
+    return blackPiecesBB;
 }
 
 std::uint64_t Board::getAllPieces() const {
-    return getAllWhitePieces() | getAllBlackPieces();
+    return allPiecesBB;
+}
+
+void Board::updateCachedBitboards() {
+    whitePiecesBB = 0ULL;
+    blackPiecesBB = 0ULL;
+    for (int pt = PAWN; pt <= KING; ++pt) {
+        whitePiecesBB |= bitboards[WHITE][pt];
+        blackPiecesBB |= bitboards[BLACK][pt];
+    }
+    allPiecesBB = whitePiecesBB | blackPiecesBB;
 }
 
 bool Board::isSquareEmpty(int pos) const {
