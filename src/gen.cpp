@@ -147,8 +147,16 @@ void MoveGenerator::generateRookMoves(std::vector<Move> &moves, int from) const 
 //  QUEENS ------------------------
 
 void MoveGenerator::generateQueenMoves(std::vector<Move> &moves, int from) const {
-    generateBishopMoves(moves, from);
-    generateRookMoves(moves, from); // queen moves = bishop + rook hence
+    uint64_t occupied = board.getAllPieces();
+    uint64_t attacks = Board::getBishopAttacks(from, occupied) | Board::getRookAttacks(from, occupied);
+    uint64_t ownPieces = (color == Color::WHITE) ? board.getAllWhitePieces() : board.getAllBlackPieces();
+    
+    attacks &= ~ownPieces;
+    
+    while (attacks) {
+        int to = Board::popLsb(attacks);
+        moves.emplace_back(from, to);
+    }
 }
 
 // KING ------------------------
@@ -290,7 +298,7 @@ std::vector<Move> MoveGenerator::filterLegalMoves(const std::vector<Move> &pseud
             }
         }
 
-        // Use makeMove/unmakeMove instead of copying the entire board
+        // Use makeMove/unmakeMove to check legality
         BoardState state = board.makeMove(move);
         bool legal = !board.isKingInCheck(ourColor);
         board.unmakeMove(move, state);

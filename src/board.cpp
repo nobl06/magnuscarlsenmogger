@@ -473,10 +473,9 @@ BoardState Board::makeMove(const Move& m) {
     // XOR side to move
     hashKey ^= Zobrist::sideKey;
     
-
     // Update cached bitboards
     updateCachedBitboards();
-
+    
     return state;
 }
 
@@ -549,7 +548,7 @@ void Board::unmakeMove(const Move& m, const BoardState& state) {
     whiteCanQueenside = state.whiteCanQueenside;
     blackCanKingside = state.blackCanKingside;
     blackCanQueenside = state.blackCanQueenside;
-
+    
     // Update cached bitboards
     updateCachedBitboards();
 }
@@ -648,6 +647,8 @@ void Board::gamestate(const std::vector<std::string> &move_hist) {
 }
 
 bool Board::isSquareAttackedBy(int square, Color attackerColor) const {
+    std::uint64_t allOccupied = getAllPieces();
+    
     int targetCol = column(square);
     int targetRow = row(square);
 
@@ -674,67 +675,30 @@ bool Board::isSquareAttackedBy(int square, Color attackerColor) const {
     }
 
     // checks for any possible knight attacks
-    const int knightDCol[8] = {1, 2, 2, 1, -1, -2, -2, -1};
-    const int knightDRow[8] = {2, 1, -1, -2, -2, -1, 1, 2};
-    for (int i = 0; i < 8; ++i) {
-        int newcol = targetCol + knightDCol[i];
-        int newrow = targetRow + knightDRow[i];
-        if (newcol >= 0 && newcol < 8 && newrow >= 0 && newrow < 8) {
-            int knightSq = position(newcol, newrow);
-            if (attackerKnights & (1ULL << knightSq)) return true;
-        }
+    uint64_t knightAttacks = getKnightAttacks(square);
+    if (knightAttacks & attackerKnights) {
+        return true;
     }
 
     // Checks for any possible king attacks
-    const int kingDCol[8] = {-1, 0, 1, -1, 1, -1, 0, 1};
-    const int kingDRow[8] = {-1, -1, -1, 0, 0, 1, 1, 1};
-    for (int i = 0; i < 8; ++i) {
-        int newcol = targetCol + kingDCol[i];
-        int newrow = targetRow + kingDRow[i];
-        if (newcol >= 0 && newcol < 8 && newrow >= 0 && newrow < 8) {
-            int kingSq = position(newcol, newrow);
-            if (attackerKing & (1ULL << kingSq)) return true;
-        }
+    uint64_t kingAttacks = getKingAttacks(square);
+    if (kingAttacks & attackerKing) {
+        return true;
     }
 
-    std::uint64_t allOccupied = getAllPieces();
 
     // Check for bishop/queen diagonal attacks
-    std::uint64_t diagonalAttackers = attackerBishops | attackerQueens;
-    const int diagDCol[4] = {1, 1, -1, -1};
-    const int diagDRow[4] = {1, -1, 1, -1};
-    for (int dir = 0; dir < 4; ++dir) {
-        int newcol = targetCol + diagDCol[dir];
-        int newrow = targetRow + diagDRow[dir];
-        while (newcol >= 0 && newcol < 8 && newrow >= 0 && newrow < 8) {
-            int sq = position(newcol, newrow);
-            std::uint64_t sqBit = 1ULL << sq;
-
-            if (diagonalAttackers & sqBit) return true;
-            if (allOccupied & sqBit) break;
-
-            newcol += diagDCol[dir];
-            newrow += diagDRow[dir];
-        }
+    uint64_t bishopAttacks = getBishopAttacks(square, allOccupied);
+    uint64_t attackerDiagonal = attackerBishops | attackerQueens;
+    if (bishopAttacks & attackerDiagonal) {
+        return true;
     }
 
     // Check for rook/queen straight attacks
-    std::uint64_t straightAttackers = attackerRooks | attackerQueens;
-    const int straightDCol[4] = {0, 0, 1, -1};
-    const int straightDRow[4] = {1, -1, 0, 0};
-    for (int dir = 0; dir < 4; ++dir) {
-        int nc = targetCol + straightDCol[dir];
-        int nr = targetRow + straightDRow[dir];
-        while (nc >= 0 && nc < 8 && nr >= 0 && nr < 8) {
-            int sq = position(nc, nr);
-            std::uint64_t sqBit = 1ULL << sq;
-
-            if (straightAttackers & sqBit) return true;
-            if (allOccupied & sqBit) break; // Blocked
-
-            nc += straightDCol[dir];
-            nr += straightDRow[dir];
-        }
+    uint64_t rookAttacks = getRookAttacks(square, allOccupied);
+    uint64_t attackerStraight = attackerRooks | attackerQueens;
+    if (rookAttacks & attackerStraight) {
+        return true;
     }
 
     return false;

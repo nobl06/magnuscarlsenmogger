@@ -41,15 +41,37 @@ int interpolate(int mgScore, int egScore, int phase) {
     return (mgScore * phase + egScore * (MAX_PHASE - phase)) / MAX_PHASE;
 }
 
-int evaluate(const Board& board) {
-    // sum up all evaluation components
-    // Each component returns (midgame_score, endgame_score) from white's perspective
+// BASIC EVALUATION 
+// Material + Piece-Square Tables 
+int basicEvaluate(const Board& board) {
+    auto [materialMG, materialEG] = Material::evaluateMaterial(board);
+    auto [psqtMG, psqtEG] = PSQT::evaluatePSQT(board);
+    
+    int mgScore = materialMG + psqtMG;
+    int egScore = materialEG + psqtEG;
+    
+    // Calculate game phase
+    int phase = calculateGamePhase(board);
+    
+    // Interpolate between midgame and endgame
+    int score = interpolate(mgScore, egScore, phase);
+    
+    // Add tempo bonus
+    constexpr int TEMPO_BONUS = 28;
+    score += TEMPO_BONUS;
+    
+    // Return from side to move perspective
+    return (board.sideToMove == WHITE) ? score : -score;
+}
 
+// ADVANCED EVALUATION 
+// Full positional evaluation
+int advancedEvaluate(const Board& board) {
+    // Sum up all evaluation components
     auto [materialMG, materialEG] = Material::evaluateMaterial(board);
     auto [psqtMG, psqtEG] = PSQT::evaluatePSQT(board);
     auto [positionalMG, positionalEG] = Positional::evaluatePositional(board);
     
-    // sum all components
     int mgScore = materialMG + psqtMG + positionalMG;
     int egScore = materialEG + psqtEG + positionalEG;
     
@@ -71,6 +93,16 @@ int evaluate(const Board& board) {
     // If it's white's turn, return (positive = good for white)
     // If it's black's turn, return negative (positive = good for black)
     return (board.sideToMove == WHITE) ? score : -score;
+}
+
+
+// Choose between basic and advanced modes
+int evaluate(const Board& board) {
+    if constexpr (EVAL_MODE == EvalMode::BASIC) {
+        return basicEvaluate(board);
+    } else {
+        return advancedEvaluate(board);
+    }
 }
 
 }
