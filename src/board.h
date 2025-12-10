@@ -17,7 +17,8 @@ enum PieceType : uint8_t {
 // Colors
 enum Color : uint8_t {
     WHITE = 0,
-    BLACK = 1
+    BLACK = 1,
+    NO_COLOR = 2
 };
 
 // Forward declare Move
@@ -101,6 +102,11 @@ class Board {
     // bitboards[Color][PieceType]
     uint64_t bitboards[2][7];
 
+    // Cached bitboards for optimization
+    uint64_t whitePiecesBB;
+    uint64_t blackPiecesBB;
+    uint64_t allPiecesBB;
+
     // Game state tracking
     bool whiteCanKingside;
     bool whiteCanQueenside;
@@ -128,4 +134,7 @@ class Board {
     bool isSquareAttackedBy(int square, Color attackerColor) const;
     bool isKingInCheck(Color kingColor) const;
     uint64_t getAttackedSquares(Color color) const;
+
+    // Update cached bitboards
+    void updateCachedBitboards();
 };
