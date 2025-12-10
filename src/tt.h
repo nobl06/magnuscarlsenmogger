@@ -14,20 +14,35 @@ namespace TT {
     
     // Transposition table entry
     struct TTEntry {
-        uint64_t key;        // Full 64-bit Zobrist key
-        int16_t value;       // Evaluation score
-        int8_t depth;        // Search depth
-        NodeType type;       // Node type
-        Move bestMove;       // Best move found
+        uint64_t key;         // Full 64-bit Zobrist key
+        int16_t value;        // Evaluation score
+        int8_t depth;         // Search depth  
+        uint8_t generation;   // Age/generation for replacement strategy
+        NodeType type;        // Node type
+        Move bestMove;        // Best move found
         
-        TTEntry() : key(0), value(0), depth(-1), type(EXACT), bestMove() {}
+        TTEntry() : key(0), value(0), depth(-1), generation(0), type(EXACT), bestMove() {}
+        
+        // Calculate age relative to current generation
+        uint8_t relative_age(uint8_t currentGen) const {
+            // Handles wrap-around correctly
+            return (255 + currentGen - generation) & 0xFF;
+        }
+    };
+    
+    // Cluster of 3 entries (best relation between efficiency and accuracy)
+    static constexpr int CLUSTER_SIZE = 3;
+    
+    struct Cluster {
+        TTEntry entries[CLUSTER_SIZE];
     };
     
     // Transposition table class
     class TranspositionTable {
     private:
-        std::vector<TTEntry> table;
+        std::vector<Cluster> table;
         size_t mask;
+        uint8_t currentGeneration;  // Incremented each search
         
     public:
         TranspositionTable(size_t sizeMB = 128);
@@ -41,7 +56,13 @@ namespace TT {
         // Clear the table
         void clear();
         
-        // Get index from key
+        // Start new search (increment generation)
+        void new_search();
+        
+        // Get current generation
+        uint8_t generation() const { return currentGeneration; }
+        
+        // Get cluster index from key
         inline size_t getIndex(uint64_t key) const {
             return key & mask;
         }
