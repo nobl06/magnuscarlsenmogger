@@ -48,6 +48,10 @@ class Board {
     // make/unmake functions
     BoardState makeMove(const Move& m);
     void unmakeMove(const Move& m, const BoardState& state);
+    
+    // Null move for null move pruning (we pass our turn)
+    void makeNullMove();
+    void unmakeNullMove();
 
     static constexpr int position(int column, int row) { return row * 8 + column; }
     static constexpr int column(int position) { return position % 8; }
@@ -120,6 +124,9 @@ class Board {
     
     // History for repetition detection
     std::vector<uint64_t> hashHistory;
+    
+    // Null move state (for makeNullMove/unmakeNullMove)
+    int savedEnPassant;
     
     // Compute hash from scratch (for debugging)
     uint64_t computeHash() const;
