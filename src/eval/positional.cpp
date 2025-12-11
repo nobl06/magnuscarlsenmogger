@@ -1131,10 +1131,65 @@ std::pair<int, int> evaluateSpace(const Board& board) {
 // Winnable/Complexity Adjustment
 // ========================================
 
+// Material value constants (from Stockfish)
+constexpr int KNIGHT_VALUE_MG = 781;
+constexpr int BISHOP_VALUE_MG = 825;
+constexpr int ROOK_VALUE_MG = 1276;
+constexpr int QUEEN_VALUE_MG = 2538;
+
+// Scale factor constants
+constexpr int SCALE_FACTOR_NORMAL = 64;
+
 // Count passed pawns
 int countPassedPawns(const Board& board) {
     return Board::popcount(getPassedPawns(board, WHITE)) + 
            Board::popcount(getPassedPawns(board, BLACK));
+}
+
+// Calculate non-pawn material for a color
+int nonPawnMaterial(const Board& board, Color color) {
+    int npm = 0;
+    npm += Board::popcount(board.bitboards[color][KNIGHT]) * KNIGHT_VALUE_MG;
+    npm += Board::popcount(board.bitboards[color][BISHOP]) * BISHOP_VALUE_MG;
+    npm += Board::popcount(board.bitboards[color][ROOK]) * ROOK_VALUE_MG;
+    npm += Board::popcount(board.bitboards[color][QUEEN]) * QUEEN_VALUE_MG;
+    return npm;
+}
+
+// Check if bishops are on opposite colors
+bool hasOppositeBishops(const Board& board) {
+    int whiteBishops = Board::popcount(board.bitboards[WHITE][BISHOP]);
+    int blackBishops = Board::popcount(board.bitboards[BLACK][BISHOP]);
+    
+    // Must have exactly one bishop each
+    if (whiteBishops != 1 || blackBishops != 1) {
+        return false;
+    }
+    
+    int whiteBishopSq = Board::getLsb(board.bitboards[WHITE][BISHOP]);
+    int blackBishopSq = Board::getLsb(board.bitboards[BLACK][BISHOP]);
+    
+    // Check if they're on opposite colored squares
+    // Square color = (row + column) % 2
+    int whiteSquareColor = (Board::row(whiteBishopSq) + Board::column(whiteBishopSq)) % 2;
+    int blackSquareColor = (Board::row(blackBishopSq) + Board::column(blackBishopSq)) % 2;
+    
+    return whiteSquareColor != blackSquareColor;
+}
+
+// Check if pawns are only on one flank
+bool pawnsOnSingleFlank(const Board& board) {
+    uint64_t allPawns = board.bitboards[WHITE][PAWN] | board.bitboards[BLACK][PAWN];
+    
+    // Queenside: a-c files (0-2), Kingside: f-h files (5-7)
+    uint64_t queenside = Board::columnBB(0) | Board::columnBB(1) | Board::columnBB(2);
+    uint64_t kingside = Board::columnBB(5) | Board::columnBB(6) | Board::columnBB(7);
+    
+    bool hasQueenside = (allPawns & queenside) != 0;
+    bool hasKingside = (allPawns & kingside) != 0;
+    
+    // Single flank if pawns on only one side OR neither side
+    return !(hasQueenside && hasKingside);
 }
 
 
@@ -1163,18 +1218,11 @@ std::pair<int, int> applyWinnable(const Board& board, int mg, int eg) {
     uint64_t kingside = Board::columnBB(5) | Board::columnBB(6) | Board::columnBB(7);
     bool pawnsOnBothFlanks = (allPawns & queenside) && (allPawns & kingside);
     
-    // Outflanking calculation
-    int outflanking;
-    if (!pawnsOnBothFlanks && std::abs(whiteKingColumn - blackKingColumn) <= 1) {
-        outflanking = (whiteKingColumn < blackKingColumn) ? -37 : 37;
-    } else {
-        outflanking = std::abs(whiteKingColumn - blackKingColumn) 
-                    - std::abs(whiteKingRow - blackKingRow);
-    }
+    // Outflanking calculation (Stockfish: distance<File> + signed rank difference)
+    int outflanking = std::abs(whiteKingColumn - blackKingColumn) 
+                    + (whiteKingRow - blackKingRow);
     
     // Infiltration: king has penetrated enemy territory
-    // Can be 0, 1, or 2 (both kings infiltrating)
-    // White infiltrates if rank > 3 (ranks 4-7), Black infiltrates if rank < 4 (ranks 0-3)
     int infiltration = (whiteKingRow > 3 ? 1 : 0) + (blackKingRow < 4 ? 1 : 0);
     
     // Pawn count
@@ -1194,11 +1242,10 @@ std::pair<int, int> applyWinnable(const Board& board, int mg, int eg) {
                         Board::popcount(board.bitboards[BLACK][ROOK]) +
                         Board::popcount(board.bitboards[BLACK][QUEEN])) == 0;
     
-    // Almost unwinnable: drawish position
-    // No infiltration, no pawns on both flanks, and outflanking is negative
-    bool almostUnwinnable = !infiltration && !pawnsOnBothFlanks && (outflanking < 0);
+    // Almost unwinnable: drawish position (Stockfish: outflanking < 0 && !pawnsOnBothFlanks)
+    bool almostUnwinnable = (outflanking < 0) && !pawnsOnBothFlanks;
     
-    // Stockfish complexity formula
+    // Stockfish complexity formula for midgame adjustment
     int complexity =   9 * passedCount
                     + 12 * pawnCount
                     +  9 * outflanking
@@ -1208,13 +1255,107 @@ std::pair<int, int> applyWinnable(const Board& board, int mg, int eg) {
                     - 43 * (almostUnwinnable ? 1 : 0)
                     - 110;
     
-    // Adjust endgame score based on complexity
-    // sign = +1 if white winning, -1 if black winning, 0 if equal
-    int sign = (eg > 0) - (eg < 0);
-
-    int egAdjusted = eg + sign * std::max(complexity, -std::abs(eg));
+    // Adjust midgame and endgame scores based on complexity
+    int mgSign = (mg > 0) - (mg < 0);
+    int egSign = (eg > 0) - (eg < 0);
+    int mgComplexity = std::max(-std::abs(mg), std::min(complexity + 50, 0));
+    int mgAdjusted = mg + mgSign * mgComplexity;
+    int egAdjusted = eg + egSign * std::max(complexity, -std::abs(eg));
     
-    return {mg, egAdjusted};
+    // ========================================
+    // SCALE FACTOR
+    // ========================================
+    
+    // Determine strong side
+    Color strongSide = (egAdjusted > 0) ? WHITE : BLACK;
+    
+    // Calculate non-pawn material for both sides
+    int npm_w = nonPawnMaterial(board, WHITE);
+    int npm_b = nonPawnMaterial(board, BLACK);
+    
+    // Initialize scale factor
+    int sf = SCALE_FACTOR_NORMAL; // 64
+    
+    // Opposite Colored Bishops
+    if (hasOppositeBishops(board)) {
+        // Pure opposite colored bishop endgame (only bishops and pawns)
+        if (npm_w == BISHOP_VALUE_MG && npm_b == BISHOP_VALUE_MG) {
+            // Scale based on passed pawns of strong side
+            int strongPassedPawns = Board::popcount(getPassedPawns(board, strongSide));
+            sf = 18 + 4 * strongPassedPawns;
+        }
+        // Mixed material with opposite bishops
+        else {
+            // Scale based on total piece count of strong side
+            int strongPieceCount = Board::popcount(board.bitboards[strongSide][KNIGHT])
+                                 + Board::popcount(board.bitboards[strongSide][BISHOP])
+                                 + Board::popcount(board.bitboards[strongSide][ROOK])
+                                 + Board::popcount(board.bitboards[strongSide][QUEEN]);
+            sf = 22 + 3 * strongPieceCount;
+        }
+    }
+    //Rook Endgames
+    else if (npm_w == ROOK_VALUE_MG && npm_b == ROOK_VALUE_MG) {
+        // Equal rook endgame
+        int whitePawns = Board::popcount(board.bitboards[WHITE][PAWN]);
+        int blackPawns = Board::popcount(board.bitboards[BLACK][PAWN]);
+        int strongPawns = (strongSide == WHITE) ? whitePawns : blackPawns;
+        int weakPawns = (strongSide == WHITE) ? blackPawns : whitePawns;
+        
+        // Pawn advantage must be at most 1
+        if (strongPawns - weakPawns <= 1) {
+            // Check if strong side's pawns are on single flank
+            Color weakSide = (Color)(1 - strongSide);
+            uint64_t strongPawnBB = board.bitboards[strongSide][PAWN];
+            bool strongQueenside = (strongPawnBB & queenside) != 0;
+            bool strongKingside = (strongPawnBB & kingside) != 0;
+            
+            // Pawns on single flank (not both)
+            if (strongQueenside != strongKingside) {
+                // Check if weak king is near their pawns
+                uint64_t weakKing = board.bitboards[weakSide][KING];
+                int weakKingSq = Board::getLsb(weakKing);
+                uint64_t weakKingAttacks = Board::getKingAttacks(weakKingSq);
+                uint64_t weakPawnBB = board.bitboards[weakSide][PAWN];
+                
+                if (weakKingAttacks & weakPawnBB) {
+                    sf = 36; // Very drawish
+                }
+            }
+        }
+    }
+    // Queen Imbalance
+    else if (Board::popcount(board.bitboards[WHITE][QUEEN]) + 
+             Board::popcount(board.bitboards[BLACK][QUEEN]) == 1) {
+        // Exactly one queen on the board
+        Color queenSide = (Board::popcount(board.bitboards[WHITE][QUEEN]) == 1) ? WHITE : BLACK;
+        Color noQueenSide = (Color)(1 - queenSide);
+        
+        // Count minors on the side without queen (bishops and knights)
+        int minorCount = Board::popcount(board.bitboards[noQueenSide][KNIGHT])
+                       + Board::popcount(board.bitboards[noQueenSide][BISHOP]);
+        
+        sf = 37 + 3 * minorCount;
+    }
+    // General Pawn-Based Scaling
+    else {
+        // Scaling based on strong side's pawn count
+        int strongPawns = Board::popcount(board.bitboards[strongSide][PAWN]);
+        sf = std::min(sf, 36 + 7 * strongPawns) - 4 * !pawnsOnBothFlanks;
+    }
+    
+    // Single Flank Penalty
+    if (!pawnsOnBothFlanks) {
+        sf -= 4;
+    }
+    
+    // Clamp scale factor to valid range [0, 128]
+    sf = std::max(0, std::min(sf, 128));
+    
+    // Apply scale factor to endgame score
+    int egScaled = (egAdjusted * sf) / SCALE_FACTOR_NORMAL;
+    
+    return {mgAdjusted, egScaled};
 }
 
 // ========================================

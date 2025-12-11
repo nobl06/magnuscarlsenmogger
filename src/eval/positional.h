@@ -1,3 +1,4 @@
+
 #pragma once
 #include "../board.h"
 #include "defs.h"
@@ -31,6 +32,11 @@ uint64_t getBackwardPawns(const Board& board, Color color);
 // Winnable/Complexity adjustment
 std::pair<int, int> applyWinnable(const Board& board, int mg, int eg);
 int countPassedPawns(const Board& board);
+
+// Helper functions for scale factor logic
+int nonPawnMaterial(const Board& board, Color color);
+bool hasOppositeBishops(const Board& board);
+bool pawnsOnSingleFlank(const Board& board);
 
 }
 
