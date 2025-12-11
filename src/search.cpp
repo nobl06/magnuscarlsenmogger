@@ -275,21 +275,29 @@ int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, bool pvNode
         // Evaluate current position
         int staticEval = Evaluation::evaluate(board);
         
-        // Only try NMP if we're in a good position (at or above beta)
+        // Only try NMP if we're in a good position
         if (staticEval >= beta) {
-            // Make null move (pass turn)
+            // Adaptive reduction
+            int R = 3 + depth / 3;
+            R += std::min((staticEval - beta) / 200, 2);
+            R = std::min(R, depth - 1);
+            
+            // Make null move
             board.makeNullMove();
             
             // Search with reduced depth
-            int R = 2;
-            int nullScore = -alphaBeta(board, depth - R, -beta, -beta + 1, ply + 1, false, nullptr, nullptr, true);
+            int nullScore = -alphaBeta(board, depth - R - 1 , -beta, -beta + 1, ply + 1, false, nullptr, nullptr, true);
             
             // Unmake null move
             board.unmakeNullMove();
             
             // If even after passing we are winning, cut off
             if (nullScore >= beta) {
-                return beta; 
+                // Mate scores from null move can be unreliable 
+                if (nullScore >= MATE_SCORE - MAX_PLY) {
+                    return beta;
+                }
+                return nullScore;
             }
         }
     }
