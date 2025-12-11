@@ -3,6 +3,8 @@ cmake_minimum_required(VERSION 3.10)
 project(MagnusCarlsenMogger)
 
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG -march=native")
+set(CMAKE_BUILD_TYPE Release)
 
 # Original executable for teacher evaluation (file-based interface)
 add_executable(MagnusCarlsenMogger
