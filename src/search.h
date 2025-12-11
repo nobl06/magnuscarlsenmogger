@@ -49,6 +49,9 @@ Move findBestMove(Board &board, int depth);
 // Internal alpha-beta function
 int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, bool pvNode, Move* pv, Move* bestMoveOut = nullptr, bool isNullMove = false);
 
+// Quiescence search - searches captures until position is quiet
+int quiescence(Board &board, int alpha, int beta, int ply);
+
 // Helper function
 int getMateScore(int ply);
 
