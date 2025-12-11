@@ -122,6 +122,11 @@ inline int value_from_tt(int v, int ply) {
 
 // quiescence search - searches only tactical moves (captures/promotions) until quiet
 int quiescence(Board &board, int alpha, int beta, int ply) {
+    // Prevent stack overflow
+    if (ply >= MAX_PLY) {
+        return Evaluation::evaluate(board);
+    }
+    
     if (out_of_time()) return alpha;
     
     stats.nodes++;
