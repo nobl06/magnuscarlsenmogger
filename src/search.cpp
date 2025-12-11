@@ -187,19 +187,25 @@ int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, bool pvNode
     
     // Null move pruning
     if (depth >= 3 && !pvNode && !isNullMove && !inEndgame && !board.isKingInCheck(board.sideToMove)) {
-        // Make null move (pass turn)
-        board.makeNullMove();
+        // Evaluate current position
+        int staticEval = Evaluation::evaluate(board);
         
-        // Search with reduced depth
-        int R = 3;  // Reduction amount
-        int nullScore = -alphaBeta(board, depth - R, -beta, -beta + 1, ply + 1, false, nullptr, nullptr, true);
-        
-        // Unmake null move
-        board.unmakeNullMove();
-        
-        // If position is too good
-        if (nullScore >= beta) {
-            return beta;  // Beta cutoff
+        // Only try NMP if we're in a good position (at or above beta)
+        if (staticEval >= beta) {
+            // Make null move (pass turn)
+            board.makeNullMove();
+            
+            // Search with reduced depth
+            int R = 2;
+            int nullScore = -alphaBeta(board, depth - R, -beta, -beta + 1, ply + 1, false, nullptr, nullptr, true);
+            
+            // Unmake null move
+            board.unmakeNullMove();
+            
+            // If even after passing we are winning, cut off
+            if (nullScore >= beta) {
+                return beta; 
+            }
         }
     }
     
@@ -443,6 +449,7 @@ Move findBestMove(Board &board, int depth) {
     // Iterative deepening
     for (int currentDepth = 1; currentDepth <= depth; currentDepth++) {
         auto layer_start = std::chrono::steady_clock::now(); // Timing a depth
+        uint64_t nodesAtStart = stats.nodes;
         
         int alpha = -INFINITY_SCORE;
         int beta = INFINITY_SCORE;
@@ -468,8 +475,8 @@ Move findBestMove(Board &board, int depth) {
         }
         
         for (const Move &move : legalMoves) {
-            if (out_of_time()) break;
-            
+            if (out_of_time()) break;   
+
             // Child PV for this move
             Move childPv[MAX_PLY];
             for (int i = 0; i < MAX_PLY; i++) childPv[i] = Move();
@@ -502,10 +509,17 @@ Move findBestMove(Board &board, int depth) {
                             layer_end - layer_start)
                             .count();
         
-        std::cout << "Depth " << currentDepth
-                  << " took " << layer_ms << " ms\n";
+        // Calculate nodes searched this depth
+        uint64_t nodesThisDepth = stats.nodes - nodesAtStart;
         
-        if (out_of_time()) break;
+        std::cout << "Depth " << currentDepth
+                  << " took " << layer_ms << " ms"
+                  << " (nodes: " << nodesThisDepth << ")\n";
+        
+        if (out_of_time()) {
+            std::cout << "Time limit reached after depth " << currentDepth << "\n";
+            break;
+        }
         
         // Depth completed, update global best move and PV
         bestMove = bestMoveThisIter;
