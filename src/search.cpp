@@ -120,6 +120,86 @@ inline int value_from_tt(int v, int ply) {
     return v;
 }
 
+// quiescence search - searches only tactical moves (captures/promotions) until quiet
+int quiescence(Board &board, int alpha, int beta, int ply) {
+    if (out_of_time()) return alpha;
+    
+    stats.nodes++;
+    
+    // get stand-pat score (static evaluation)
+    int standPat = Evaluation::evaluate(board);
+    
+    // beta cutoff 
+    if (standPat >= beta) {
+        return beta;
+    }
+    
+    // update alpha with stand-pat
+    if (standPat > alpha) {
+        alpha = standPat;
+    }
+    
+    // delta pruning constant - roughly queen value
+    // if even capturing a queen can't raise alpha, skip searching
+    constexpr int delta = 900;
+    
+    // generate all moves
+    MoveGenerator gen(board, board.sideToMove);
+    std::vector<Move> pseudoLegal = gen.generatePseudoLegalMoves();
+    std::vector<Move> legalMoves = gen.filterLegalMoves(pseudoLegal);
+    
+    // filter to only tactical moves (captures and promotions)
+    std::vector<Move> tacticalMoves;
+    for (const Move& move : legalMoves) {
+        PieceType victim = board.pieceAt(move.to);
+        bool isCapture = (victim != PieceType::EMPTY);
+        bool isPromotion = (move.promotion != PieceType::EMPTY);
+        
+        if (isCapture || isPromotion) {
+            tacticalMoves.push_back(move);
+        }
+    }
+    
+    // sort tactical moves by MVV-LVA
+    for (Move& move : tacticalMoves) {
+        move.score = scoreMove(move, board, ply);
+    }
+    std::sort(tacticalMoves.begin(), tacticalMoves.end(),
+              [](const Move& a, const Move& b) { return a.score > b.score; });
+    
+    // search tactical moves
+    for (const Move& move : tacticalMoves) {
+        if (out_of_time()) break;
+        
+        // delta pruning - if this capture can't possibly raise alpha, skip it
+        PieceType victim = board.pieceAt(move.to);
+        if (victim != PieceType::EMPTY) {
+            int captureValue = pieceValues[victim];
+            
+            // if stand-pat + captured piece value + very optimistic delta can't beat alpha, prune
+            if (standPat + captureValue + delta < alpha) {
+                continue; 
+            }
+        }
+        
+        BoardState state = board.makeMove(move);
+        int score = -quiescence(board, -beta, -alpha, ply + 1);
+        board.unmakeMove(move, state);
+        
+        if (out_of_time()) break;
+        
+        if (score >= beta) {
+            return beta;  
+        }
+        
+        if (score > alpha) {
+            alpha = score;
+        }
+    }
+    
+    return alpha;
+}
+
 // alpha-beta search with TT integration
 int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, bool pvNode, Move* pv, Move* bestMoveOut, bool isNullMove) {
     // Initialize PV
@@ -173,9 +253,9 @@ int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, bool pvNode
         ttMove = ttEntry->bestMove;
     }
     
-    // terminal node - return evaluation
+    // terminal node - quiescence search
     if (depth == 0) {
-        return Evaluation::evaluate(board);
+        return quiescence(board, alpha, beta, ply);
     }
     
     
