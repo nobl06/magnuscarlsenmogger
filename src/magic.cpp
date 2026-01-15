@@ -1,8 +1,11 @@
 #include "magic.h"
 #include <cstring>
+#include <iostream>
+#include <ios>
+#include <random>
 
 namespace Magic {
-    // Phase 2: Data structures
+    // Phase 2: Data structures for sliding pieces
     static uint64_t rookMasks[64];
     static uint64_t bishopMasks[64];
     static uint64_t rookMagics[64];
@@ -13,6 +16,10 @@ namespace Magic {
     static uint64_t* bishopAttackTable;
     static uint64_t* rookTableOffset[64];
     static uint64_t* bishopTableOffset[64];
+    
+    // Precomputed attack tables for non-sliding pieces
+    static uint64_t knightAttacks[64];
+    static uint64_t kingAttacks[64];
     
     // Helper functions
     static inline int popcount(uint64_t bb) {
@@ -81,7 +88,7 @@ namespace Magic {
     }
     
     // Phase 6: Slow reference implementation for computing attacks
-    uint64_t getRookAttacksSlow(int square, uint64_t occupied) {
+    static uint64_t getRookAttacksSlow(int square, uint64_t occupied) {
         uint64_t attacks = 0ULL;
         int r = row(square);
         int c = column(square);
@@ -117,7 +124,7 @@ namespace Magic {
         return attacks;
     }
     
-    uint64_t getBishopAttacksSlow(int square, uint64_t occupied) {
+    static uint64_t getBishopAttacksSlow(int square, uint64_t occupied) {
         uint64_t attacks = 0ULL;
         int r = row(square);
         int c = column(square);
@@ -218,8 +225,56 @@ namespace Magic {
         0x0240080802809010ULL
     };
     
+    // Initialize precomputed knight attack table
+    static void initKnightAttacks() {
+        const int knightOffsets[8][2] = {
+            {-2, -1}, {-2, 1}, {-1, -2}, {-1, 2},
+            {1, -2}, {1, 2}, {2, -1}, {2, 1}
+        };
+        
+        for (int sq = 0; sq < 64; sq++) {
+            uint64_t attacks = 0;
+            int c = column(sq);
+            int r = row(sq);
+            
+            for (int i = 0; i < 8; i++) {
+                int newCol = c + knightOffsets[i][0];
+                int newRow = r + knightOffsets[i][1];
+                if (newCol >= 0 && newCol < 8 && newRow >= 0 && newRow < 8) {
+                    attacks |= (1ULL << position(newCol, newRow));
+                }
+            }
+            knightAttacks[sq] = attacks;
+        }
+    }
+    
+    // Initialize precomputed king attack table
+    static void initKingAttacks() {
+        for (int sq = 0; sq < 64; sq++) {
+            uint64_t attacks = 0;
+            int c = column(sq);
+            int r = row(sq);
+            
+            for (int dc = -1; dc <= 1; dc++) {
+                for (int dr = -1; dr <= 1; dr++) {
+                    if (dc == 0 && dr == 0) continue;
+                    int newCol = c + dc;
+                    int newRow = r + dr;
+                    if (newCol >= 0 && newCol < 8 && newRow >= 0 && newRow < 8) {
+                        attacks |= (1ULL << position(newCol, newRow));
+                    }
+                }
+            }
+            kingAttacks[sq] = attacks;
+        }
+    }
+    
     // Phase 5 & 6: Initialize tables
     void init() {
+        // Initialize non-sliding piece attack tables first
+        initKnightAttacks();
+        initKingAttacks();
+        
         // Calculate total table size needed
         int rookTableSize = 0;
         int bishopTableSize = 0;
@@ -264,6 +319,12 @@ namespace Magic {
                     uint64_t occupancy = indexToOccupancy(i, bits, mask);
                     uint64_t attacks = getRookAttacksSlow(sq, occupancy);
                     uint64_t index = (occupancy * rookMagics[sq]) >> rookShifts[sq];
+                    
+                    // Collision detection - with perfect magics, this should never happen
+                    if (rookPtr[index] != 0 && rookPtr[index] != attacks) {
+                        // This indicates a collision - magic number might be wrong
+                        // For now, we'll overwrite (but this shouldn't happen with perfect magics)
+                    }
                     rookPtr[index] = attacks;
                 }
                 
@@ -281,6 +342,12 @@ namespace Magic {
                     uint64_t occupancy = indexToOccupancy(i, bits, mask);
                     uint64_t attacks = getBishopAttacksSlow(sq, occupancy);
                     uint64_t index = (occupancy * bishopMagics[sq]) >> bishopShifts[sq];
+                    
+                    // Collision detection - with perfect magics, this should never happen
+                    if (bishopPtr[index] != 0 && bishopPtr[index] != attacks) {
+                        // This indicates a collision - magic number might be wrong
+                        // For now, we'll overwrite (but this shouldn't happen with perfect magics)
+                    }
                     bishopPtr[index] = attacks;
                 }
                 
@@ -300,6 +367,55 @@ namespace Magic {
         occupied &= bishopMasks[square];
         uint64_t index = (occupied * bishopMagics[square]) >> bishopShifts[square];
         return bishopTableOffset[square][index];
+    }
+    
+    uint64_t getKnightAttacks(int square) {
+        return knightAttacks[square];
+    }
+    
+    uint64_t getKingAttacks(int square) {
+        return kingAttacks[square];
+    }
+    
+    // Verification function
+    bool verify() {
+        std::mt19937_64 rng(12345); // Fixed seed for reproducibility
+        
+        // Test rook attacks
+        for (int sq = 0; sq < 64; sq++) {
+            for (int test = 0; test < 100; test++) {
+                uint64_t occupied = rng();
+                uint64_t magicResult = getRookAttacks(sq, occupied);
+                uint64_t slowResult = getRookAttacksSlow(sq, occupied);
+                
+                if (magicResult != slowResult) {
+                    std::cerr << "ERROR: Rook attacks mismatch at square " << sq 
+                              << " with occupied " << std::hex << occupied << std::dec << "\n";
+                    std::cerr << "  Magic: " << std::hex << magicResult << std::dec << "\n";
+                    std::cerr << "  Slow:  " << std::hex << slowResult << std::dec << "\n";
+                    return false;
+                }
+            }
+        }
+        
+        // Test bishop attacks
+        for (int sq = 0; sq < 64; sq++) {
+            for (int test = 0; test < 100; test++) {
+                uint64_t occupied = rng();
+                uint64_t magicResult = getBishopAttacks(sq, occupied);
+                uint64_t slowResult = getBishopAttacksSlow(sq, occupied);
+                
+                if (magicResult != slowResult) {
+                    std::cerr << "ERROR: Bishop attacks mismatch at square " << sq 
+                              << " with occupied " << std::hex << occupied << std::dec << "\n";
+                    std::cerr << "  Magic: " << std::hex << magicResult << std::dec << "\n";
+                    std::cerr << "  Slow:  " << std::hex << slowResult << std::dec << "\n";
+                    return false;
+                }
+            }
+        }
+        
+        return true;
     }
 }
 

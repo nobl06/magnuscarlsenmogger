@@ -14,6 +14,9 @@
 #include <string>
 #include <vector>
 
+// External time limit from search.cpp
+extern int time_limit_ms;
+
 
 std::vector<std::string> read_file(std::string file) {
     std::ifstream f(file); // open file
@@ -88,6 +91,7 @@ int main(int argc, char *argv[]) {
 
     // search for best move
     const int MAXDEPTH = 64;
+    time_limit_ms = 9000;  
     Move chosenMove = Search::findBestMove(board, MAXDEPTH);
 
     auto total_end = std::chrono::steady_clock::now();

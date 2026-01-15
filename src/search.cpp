@@ -589,7 +589,6 @@ Move findBestMove(Board &board, int depth) {
     }
     
     start_time = std::chrono::steady_clock::now();
-    time_limit_ms = 8500; // 9 seconds
     
     // generate root moves
     MoveGenerator gen(board, board.sideToMove);

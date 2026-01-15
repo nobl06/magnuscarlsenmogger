@@ -21,6 +21,9 @@
 #include <vector>
 #include <chrono>
 
+// External time limit from search.cpp
+extern int time_limit_ms;
+
 // Find a move in the legal moves list that matches the UCI string
 Move findMoveFromString(Board &board, const std::string &moveStr) {
     MoveGenerator gen(board, board.sideToMove);
@@ -85,7 +88,7 @@ void handlePosition(Board &board, std::istringstream &is) {
 // Handle "go" command
 void handleGo(Board &board, std::istringstream &is) {
     std::string token;
-    int depth = 64;      // Default max depth (will be capped)
+    int depth = 64;      // Default max depth
     int wtime = 0, btime = 0, winc = 0, binc = 0;
     int movestogo = 30;  // Default moves to go
     int movetime = 0;
@@ -111,16 +114,13 @@ void handleGo(Board &board, std::istringstream &is) {
         }
     }
 
-    // Simple time management
-    // For now, use a fixed depth based on available time
+    // Time management: set time_limit_ms and let iterative deepening work
     int searchDepth = depth;
     
     if (movetime > 0) {
-        // Fixed time per move - use reasonable depth
-        if (movetime < 1000) searchDepth = std::min(searchDepth, 4);
-        else if (movetime < 5000) searchDepth = std::min(searchDepth, 6);
-        else if (movetime < 15000) searchDepth = std::min(searchDepth, 8);
-        else searchDepth = std::min(searchDepth, 10);
+        // Fixed time per move - use it directly
+        time_limit_ms = movetime - 50;  // Small buffer for safety
+        searchDepth = 64;  // Let time control limit the search
     } else if (wtime > 0 || btime > 0) {
         // Time control - allocate time based on remaining time
         int ourTime = (board.sideToMove == Color::WHITE) ? wtime : btime;
@@ -129,18 +129,19 @@ void handleGo(Board &board, std::istringstream &is) {
         // Simple allocation: use ~1/30th of remaining time + increment
         int allocatedTime = ourTime / movestogo + ourInc;
         
-        if (allocatedTime < 500) searchDepth = std::min(searchDepth, 3);
-        else if (allocatedTime < 1000) searchDepth = std::min(searchDepth, 4);
-        else if (allocatedTime < 2000) searchDepth = std::min(searchDepth, 5);
-        else if (allocatedTime < 5000) searchDepth = std::min(searchDepth, 6);
-        else if (allocatedTime < 10000) searchDepth = std::min(searchDepth, 7);
-        else searchDepth = std::min(searchDepth, 8);
-    } else if (!infinite) {
-        // No time info - use reasonable default
-        searchDepth = std::min(searchDepth, 6);
+        // Set time limit with small buffer
+        time_limit_ms = allocatedTime - 20;
+        searchDepth = 64;  // Let time control limit the search
+    } else if (infinite) {
+        time_limit_ms = 1000000;  // Very long time for infinite
+        searchDepth = 64;
+    } else {
+        // No time info - use reasonable default (5 seconds)
+        time_limit_ms = 5000;
+        searchDepth = 64;
     }
 
-    // Search for best move
+    // Search for best move using iterative deepening with time control
     Move bestMove = Search::findBestMove(board, searchDepth);
     
     // Format output
@@ -200,6 +201,11 @@ void uciLoop() {
 int main() {
     // Initialize magic bitboards
     Magic::init();
+    
+    // Verify magic bitboards are working correctly
+    if (!Magic::verify()) {
+        std::cerr << "WARNING: Magic bitboard verification failed! Results may be incorrect.\n";
+    }
     
     // Initialize piece-square tables
     PSQT::init();

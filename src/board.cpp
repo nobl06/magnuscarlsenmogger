@@ -815,31 +815,17 @@ int Board::columnDistance(int sq1, int sq2) {
 // Attack Generation Functions
 
 uint64_t Board::getKnightAttacks(int square) {
-    uint64_t attacks = 0;
-    int col = column(square);
-    int r = row(square);
-    
-    const int offsets[8][2] = {
-        {-2, -1}, {-2, 1}, {-1, -2}, {-1, 2},
-        {1, -2}, {1, 2}, {2, -1}, {2, 1}
-    };
-    
-    for (auto [dc, dr] : offsets) {
-        int newCol = col + dc;
-        int newRow = r + dr;
-        if (newCol >= 0 && newCol < 8 && newRow >= 0 && newRow < 8) {
-            attacks |= (1ULL << position(newCol, newRow));
-        }
-    }
-    
-    return attacks;
+    // Use precomputed table for O(1) lookup
+    return Magic::getKnightAttacks(square);
 }
 
 uint64_t Board::getBishopAttacks(int square, uint64_t occupied) {
+    // Use magic bitboards for O(1) lookup instead of O(n) loops
     return Magic::getBishopAttacks(square, occupied);
 }
 
 uint64_t Board::getRookAttacks(int square, uint64_t occupied) {
+    // Use magic bitboards for O(1) lookup instead of O(n) loops
     return Magic::getRookAttacks(square, occupied);
 }
 
@@ -848,22 +834,8 @@ uint64_t Board::getQueenAttacks(int square, uint64_t occupied) {
 }
 
 uint64_t Board::getKingAttacks(int square) {
-    uint64_t attacks = 0;
-    int col = column(square);
-    int r = row(square);
-    
-    for (int dc = -1; dc <= 1; ++dc) {
-        for (int dr = -1; dr <= 1; ++dr) {
-            if (dc == 0 && dr == 0) continue;
-            int newCol = col + dc;
-            int newRow = r + dr;
-            if (newCol >= 0 && newCol < 8 && newRow >= 0 && newRow < 8) {
-                attacks |= (1ULL << position(newCol, newRow));
-            }
-        }
-    }
-    
-    return attacks;
+    // Use precomputed table for O(1) lookup
+    return Magic::getKingAttacks(square);
 }
 
 uint64_t Board::getPawnAttacks(uint64_t pawns, Color color) {
