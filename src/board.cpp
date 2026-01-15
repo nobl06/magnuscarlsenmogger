@@ -741,6 +741,9 @@ bool Board::isKingInCheck(Color kingColor) const {
     // Find the king position
     std::uint64_t king = bitboards[kingColor][KING];
 
+    // If there is no king, we get segmentation fault, this prevents it
+    if (king == 0) return false;
+    
     int kingSq = getLsb(king);
 
     // Check if the king square is attacked by the opponent

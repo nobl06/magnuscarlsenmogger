@@ -719,6 +719,12 @@ Move findBestMove(Board &board, int depth) {
         for (int i = 0; i < MAX_PLY; i++) {
             previousPv[i] = currentPv[i];
         }
+        
+        // Stop searching if we found a forced checkmate
+        if (bestScoreThisIter >= MATE_SCORE - MAX_PLY) {
+            std::cout << "Forced checkmate found at depth " << currentDepth << "\n";
+            break;
+        }
     }
     
     return bestMove;

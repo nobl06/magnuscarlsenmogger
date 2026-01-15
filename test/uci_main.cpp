@@ -21,6 +21,25 @@
 #include <vector>
 #include <chrono>
 
+// ==================== TIME CONTROL CONFIGURATION ====================
+// Switch between QUICK_MODE and SLOW_MODE by changing the active constant
+
+// Quick mode: Original behavior - no time caps, respects UCI time controls
+const int QUICK_MODE_MAX_TIME = 100000;   // No effective cap (16.67 minutes)
+const int QUICK_MODE_DEFAULT_TIME = 5000;  // 5 seconds default
+
+// Slow mode: Capped at 10 seconds per move regardless of game time control
+const int SLOW_MODE_MAX_TIME = 10000;      // 10 seconds max per move
+const int SLOW_MODE_DEFAULT_TIME = 10000;  // 10 seconds default
+
+// ACTIVE MODE - Change this line to switch modes:
+const bool USE_QUICK_MODE = false;  // Set to true for quick, false for slow
+
+// Active time settings based on mode
+const int MAX_TIME_PER_MOVE = USE_QUICK_MODE ? QUICK_MODE_MAX_TIME : SLOW_MODE_MAX_TIME;
+const int DEFAULT_TIME_PER_MOVE = USE_QUICK_MODE ? QUICK_MODE_DEFAULT_TIME : SLOW_MODE_DEFAULT_TIME;
+// ====================================================================
+
 // External time limit from search.cpp
 extern int time_limit_ms;
 
@@ -118,8 +137,8 @@ void handleGo(Board &board, std::istringstream &is) {
     int searchDepth = depth;
     
     if (movetime > 0) {
-        // Fixed time per move - use it directly
-        time_limit_ms = movetime - 50;  // Small buffer for safety
+        // Fixed time per move - use it directly, capped at max
+        time_limit_ms = std::min(movetime - 50, MAX_TIME_PER_MOVE);
         searchDepth = 64;  // Let time control limit the search
     } else if (wtime > 0 || btime > 0) {
         // Time control - allocate time based on remaining time
@@ -129,15 +148,15 @@ void handleGo(Board &board, std::istringstream &is) {
         // Simple allocation: use ~1/30th of remaining time + increment
         int allocatedTime = ourTime / movestogo + ourInc;
         
-        // Set time limit with small buffer
-        time_limit_ms = allocatedTime - 20;
+        // Set time limit with small buffer, capped at max
+        time_limit_ms = std::min(allocatedTime - 20, MAX_TIME_PER_MOVE);
         searchDepth = 64;  // Let time control limit the search
     } else if (infinite) {
-        time_limit_ms = 1000000;  // Very long time for infinite
+        time_limit_ms = MAX_TIME_PER_MOVE;  // Use max time from active mode
         searchDepth = 64;
     } else {
-        // No time info - use reasonable default (5 seconds)
-        time_limit_ms = 5000;
+        // No time info - use default time from active mode
+        time_limit_ms = DEFAULT_TIME_PER_MOVE;
         searchDepth = 64;
     }
 
