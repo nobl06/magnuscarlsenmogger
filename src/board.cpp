@@ -673,8 +673,9 @@ void Board::gamestate(const std::vector<std::string> &move_hist) {
         if (mv.size() < 4) continue; // Apply every move from history
                                      // skipping invalid lines
         Move m = parseMove(mv);
-        update_move(m);
+        makeMove(m);
     }
+    hashHistory.clear();
 }
 
 bool Board::isSquareAttackedBy(int square, Color attackerColor) const {
