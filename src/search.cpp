@@ -75,7 +75,7 @@ constexpr int pieceValues[7] = {
 };
 
 // move ordering
-int scoreMove(const Move &move, const Board &board, int ply) {
+int scoreMove(const Move &move, const Board &board, const Stack* stackPtr) {
     PieceType victim = board.pieceAt(move.to);
     PieceType attacker = board.pieceAt(move.from);
 
@@ -90,7 +90,7 @@ int scoreMove(const Move &move, const Board &board, int ply) {
     }
 
     // 3. Killer moves - good quiet moves from sibling nodes
-    if (killers[ply].isKiller(move)) {
+    if (killers[stackPtr->ply].isKiller(move)) {
         return 800000;
     }
 
@@ -98,38 +98,51 @@ int scoreMove(const Move &move, const Board &board, int ply) {
     return history[move.from][move.to];
 }
 
-int getMateScore(int ply) {
-    return -MATE_SCORE + ply;
+int getMateScore(const Stack* stackPtr) {
+    return -MATE_SCORE + stackPtr->ply;
 }
 
 // Adjusts mate scores from "plies to mate from root" to "plies to mate from current position"
-inline int value_to_tt(int v, int ply) {
+inline int value_to_tt(int v, const Stack* stackPtr) {
     if (v >= MATE_SCORE - MAX_PLY)
-        return v + ply;  // Mate in X moves
+        return v + stackPtr->ply;  // Mate in X moves
     if (v <= -MATE_SCORE + MAX_PLY)
-        return v - ply;  // Mated in X moves
+        return v - stackPtr->ply;  // Mated in X moves
     return v;
 }
 
 // Inverse: adjusts from "plies to mate from current position" to "plies to mate from root"
-inline int value_from_tt(int v, int ply) {
+inline int value_from_tt(int v, const Stack* stackPtr) {
     if (v >= MATE_SCORE - MAX_PLY)
-        return v - ply;
+        return v - stackPtr->ply;
     if (v <= -MATE_SCORE + MAX_PLY)
-        return v + ply;
+        return v + stackPtr->ply;
     return v;
 }
 
 // quiescence search - searches only tactical moves (captures/promotions) until quiet
-int quiescence(Board &board, int alpha, int beta, int ply) {
+int quiescence(Board &board, Stack* stackPtr, int alpha, int beta) {
     // Prevent stack overflow
-    if (ply >= MAX_PLY) {
+    if (stackPtr->ply >= MAX_PLY) {
         return Evaluation::evaluate(board);
     }
     
     if (out_of_time()) return alpha;
     
     stats.nodes++;
+    
+    // Mate distance pruning
+    if (stackPtr->ply > 0) {
+        int matedScore = -MATE_SCORE + stackPtr->ply;       // Worst case: we get mated in 'ply' moves
+        int matingScore = MATE_SCORE - stackPtr->ply - 1;   // Best case: we mate in 'ply+1' moves
+        
+        alpha = std::max(matedScore, alpha);
+        beta = std::min(matingScore, beta);
+        
+        if (alpha >= beta) {
+            return alpha;
+        }
+    }
     
     // get stand-pat score (static evaluation)
     int standPat = Evaluation::evaluate(board);
@@ -167,7 +180,7 @@ int quiescence(Board &board, int alpha, int beta, int ply) {
     
     // sort tactical moves by MVV-LVA
     for (Move& move : tacticalMoves) {
-        move.score = scoreMove(move, board, ply);
+        move.score = scoreMove(move, board, stackPtr);
     }
     std::sort(tacticalMoves.begin(), tacticalMoves.end(),
               [](const Move& a, const Move& b) { return a.score > b.score; });
@@ -188,7 +201,8 @@ int quiescence(Board &board, int alpha, int beta, int ply) {
         }
         
         BoardState state = board.makeMove(move);
-        int score = -quiescence(board, -beta, -alpha, ply + 1);
+        (stackPtr + 1)->ply = stackPtr->ply + 1;
+        int score = -quiescence(board, stackPtr + 1, -beta, -alpha);
         board.unmakeMove(move, state);
         
         if (out_of_time()) break;
@@ -206,10 +220,18 @@ int quiescence(Board &board, int alpha, int beta, int ply) {
 }
 
 // alpha-beta search with TT integration
-int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, bool pvNode, Move* pv, Move* bestMoveOut, bool isNullMove) {
+template<NodeType NT>
+int alphaBeta(Board &board, Stack* stackPtr, int depth, int alpha, int beta, bool cutNode, Move* bestMoveOut) {
+    // Determine node type at compile time
+    constexpr bool pvNode = (NT == PV || NT == Root);
+    constexpr bool rootNode = (NT == Root);
+    
     // Initialize PV
-    if (pv) pv[0] = Move();
+    if (stackPtr->pv) stackPtr->pv[0] = Move();
     if (out_of_time()) return alpha;
+    
+    // allNode = all moves fail low (not PV, not cut)
+    const bool allNode = !(pvNode || cutNode);
     
     int originalAlpha = alpha;
     uint64_t hashKey = board.hashKey;
@@ -217,17 +239,34 @@ int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, bool pvNode
     stats.nodes++;
     
     // Store position in search path for repetition detection
-    searchPath[ply] = hashKey;
+    searchPath[stackPtr->ply] = hashKey;
     
     // Prevent TT from suggesting moves that lead to repetition
-    if (ply > 0 && upcoming_repetition(board, hashKey, ply)) {
+    if (stackPtr->ply > 0 && upcoming_repetition(board, hashKey, stackPtr->ply)) {
         // Return draw score
         return 0;
+    }
+    
+    // Mate distance pruning. Same as in the quiescence search
+    if (stackPtr->ply > 0) {
+        int matedScore = -MATE_SCORE + stackPtr->ply;       // Worst case: we get mated in 'ply' moves
+        int matingScore = MATE_SCORE - stackPtr->ply - 1;   // Best case: we mate in 'ply+1' moves
+        
+        alpha = std::max(matedScore, alpha);
+        beta = std::min(matingScore, beta);
+        
+        if (alpha >= beta) {
+            return alpha;
+        }
     }
     
     // Probe transposition table
     TT::TTEntry* ttEntry = TT::tt.probe(hashKey);
     Move ttMove;
+    
+    // Track TT hit
+    stackPtr->ttHit = (ttEntry != nullptr);
+    stackPtr->ttPv = false;
     
     // TT CUTOFFS only at NON-PV nodes
     // PV nodes (root and expected best line) always get full search
@@ -235,7 +274,7 @@ int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, bool pvNode
         ttMove = ttEntry->bestMove;
         
         // Adjust mate scores from TT
-        int ttValue = value_from_tt(ttEntry->value, ply);
+        int ttValue = value_from_tt(ttEntry->value, stackPtr);
         
         if (ttEntry->type == TT::EXACT) {
             if (bestMoveOut) *bestMoveOut = ttMove;
@@ -260,7 +299,7 @@ int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, bool pvNode
     
     // terminal node - quiescence search
     if (depth == 0) {
-        return quiescence(board, alpha, beta, ply);
+        return quiescence(board, stackPtr, alpha, beta);
     }
     
     
@@ -271,7 +310,9 @@ int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, bool pvNode
                       board.bitboards[board.sideToMove][QUEEN] == 0);
     
     // Null move pruning
-    if (depth >= 3 && !pvNode && !isNullMove && !inEndgame && !board.isKingInCheck(board.sideToMove)) {
+    // Check previous move wasn't null (don't do two null moves in a row)
+    bool prevMoveWasNull = (stackPtr - 1)->currentMove.isNull();
+    if (depth >= 3 && !pvNode && !prevMoveWasNull && !inEndgame && !board.isKingInCheck(board.sideToMove)) {
         // Evaluate current position
         int staticEval = Evaluation::evaluate(board);
         
@@ -286,7 +327,10 @@ int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, bool pvNode
             board.makeNullMove();
             
             // Search with reduced depth
-            int nullScore = -alphaBeta(board, depth - R - 1 , -beta, -beta + 1, ply + 1, false, nullptr, nullptr, true);
+            (stackPtr + 1)->ply = stackPtr->ply + 1;
+            (stackPtr + 1)->reduction = 0;
+            (stackPtr + 1)->currentMove = Move::null();  // Mark as null move in stack
+            int nullScore = -alphaBeta<NonPV>(board, stackPtr + 1, depth - R - 1 , -beta, -beta + 1, !cutNode, nullptr);
             
             // Unmake null move
             board.unmakeNullMove();
@@ -302,6 +346,13 @@ int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, bool pvNode
         }
     }
     
+    // Internal Iterative Reductions (IIR)
+    // At sufficient depth, reduce depth for PV/Cut nodes without a TTMove.
+    int priorReduction = (stackPtr - 1)->reduction;
+    if (!allNode && depth >= 6 && ttMove.from == 0 && priorReduction <= 3) {
+        depth--;
+    }
+    
     // generate moves
     MoveGenerator gen(board, board.sideToMove);
     std::vector<Move> pseudoLegal = gen.generatePseudoLegalMoves();
@@ -314,7 +365,7 @@ int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, bool pvNode
             move.promotion == ttMove.promotion) {
             move.score = 2000000;
         } else {
-            move.score = scoreMove(move, board, ply);
+            move.score = scoreMove(move, board, stackPtr);
         }
     }
     std::sort(legalMoves.begin(), legalMoves.end(),
@@ -324,7 +375,7 @@ int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, bool pvNode
     if (legalMoves.empty()) {
         if (board.isKingInCheck(board.sideToMove)) {
             // checkmate - return mate score adjusted by ply
-            return getMateScore(ply);
+            return getMateScore(stackPtr);
         } else {
             // stalemate
             return 0;
@@ -352,23 +403,34 @@ int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, bool pvNode
         // make/unmake method (efficient - no board copying)
         BoardState state = board.makeMove(move);
         
+        // Set up child stack
+        (stackPtr + 1)->ply = stackPtr->ply + 1;
+        (stackPtr + 1)->pv = childPv;
+        (stackPtr + 1)->currentMove = move;
+        
         // PV tracking:
         bool childPvNode = pvNode && (moveCount == 1 || alpha > originalAlpha);
         
-        // Initialize child PV for this move
         childPv[0] = Move();
         
         int score;
+        int reduction = 0;
         
         // === Late Move Reduction (LMR) ===
+        // Determine child cutNode (expected to fail high)
+        bool childCutNode = !cutNode && bestScore == -INFINITY_SCORE;
+        
         // First move: always search at full depth with full window
         if (moveCount == 1) {
-            score = -alphaBeta(board, depth - 1, -beta, -alpha, ply + 1, childPvNode, childPv);
+            (stackPtr + 1)->reduction = 0;
+            if (childPvNode)
+                score = -alphaBeta<PV>(board, stackPtr + 1, depth - 1, -beta, -alpha, false, nullptr);
+            else
+                score = -alphaBeta<NonPV>(board, stackPtr + 1, depth - 1, -beta, -alpha, childCutNode, nullptr);
         }
         // Later moves: use LMR with re-search
         else {
             // Calculate reduction for non-tactical quiet moves
-            int reduction = 0;
             
             // Only reduce quiet moves at sufficient depth
             if (depth >= 3 && !isCapture && !isPromotion) {
@@ -383,20 +445,24 @@ int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, bool pvNode
             
             // Step 1: Search with reduced depth and null window
             if (reduction > 0) {
-                score = -alphaBeta(board, depth - 1 - reduction, -(alpha + 1), -alpha, ply + 1, false, childPv);
+                (stackPtr + 1)->reduction = reduction;
+                score = -alphaBeta<NonPV>(board, stackPtr + 1, depth - 1 - reduction, -(alpha + 1), -alpha, childCutNode, nullptr);
             } else {
                 // No reduction: just null window search (PVS)
-                score = -alphaBeta(board, depth - 1, -(alpha + 1), -alpha, ply + 1, false, childPv);
+                (stackPtr + 1)->reduction = 0;
+                score = -alphaBeta<NonPV>(board, stackPtr + 1, depth - 1, -(alpha + 1), -alpha, childCutNode, nullptr);
             }
             
             // Step 2: If reduced search failed high, re-search at full depth with null window
             if (reduction > 0 && score > alpha) {
-                score = -alphaBeta(board, depth - 1, -(alpha + 1), -alpha, ply + 1, false, childPv);
+                (stackPtr + 1)->reduction = 0;
+                score = -alphaBeta<NonPV>(board, stackPtr + 1, depth - 1, -(alpha + 1), -alpha, childCutNode, nullptr);
             }
             
             // Step 3: If still failed high and we're in PV node, re-search with full window
             if (score > alpha && score < beta && pvNode) {
-                score = -alphaBeta(board, depth - 1, -beta, -alpha, ply + 1, true, childPv);
+                (stackPtr + 1)->reduction = 0;
+                score = -alphaBeta<PV>(board, stackPtr + 1, depth - 1, -beta, -alpha, false, nullptr);
             }
         }
         
@@ -412,12 +478,12 @@ int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, bool pvNode
             bestMove = move;
             
             // Update PV: current move + child's PV
-            if (pv) {
-                pv[0] = move;
+            if (stackPtr->pv) {
+                stackPtr->pv[0] = move;
                 for (int i = 0; i < MAX_PLY - 1 && childPv[i].from != 0; i++) {
-                    pv[i + 1] = childPv[i];
+                    stackPtr->pv[i + 1] = childPv[i];
                 }
-                pv[MAX_PLY - 1] = Move();
+                stackPtr->pv[MAX_PLY - 1] = Move();
             }
         }
         
@@ -427,7 +493,7 @@ int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, bool pvNode
             // Update killer moves and history for quiet moves
             if (!isCapture && !isPromotion) {
                 // Killer moves: store quiet move that caused cutoff
-                killers[ply].add(move);
+                killers[stackPtr->ply].add(move);
                 
                 // History heuristic: reward with depth² bonus
                 int bonus = depth * depth;
@@ -439,7 +505,8 @@ int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, bool pvNode
             }
             
             // Store in TT as LOWERBOUND (beta cutoff)
-            TT::tt.store(hashKey, score, depth, TT::LOWERBOUND, bestMove);
+            int ttScore = value_to_tt(bestScore, stackPtr);
+            TT::tt.store(hashKey, ttScore, depth, TT::LOWERBOUND, bestMove);
             if (bestMoveOut) *bestMoveOut = bestMove;
             return beta; // fail-high cutoff
         }
@@ -461,7 +528,7 @@ int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, bool pvNode
     }
     
     // Adjust mate scores for TT storage
-    int ttScore = value_to_tt(bestScore, ply);
+    int ttScore = value_to_tt(bestScore, stackPtr);
     TT::tt.store(hashKey, ttScore, depth, nodeType, bestMove);
     
     if (bestMoveOut) *bestMoveOut = bestMove;
@@ -501,6 +568,17 @@ Move findBestMove(Board &board, int depth) {
         searchPath[i] = 0;
     }
     
+    // Initialize search stack. Root is at stackPtr[7].
+    // Allocate extra space to allow access from (stackPtr-7) to (stackPtr+2)
+    Stack stack[MAX_PLY + 10] = {};
+    Stack* stackPtr = stack + 7;
+    
+    // Initialize stack entries
+    for (int i = -7; i <= MAX_PLY + 2; i++) {
+        (stackPtr + i)->ply = i;
+        (stackPtr + i)->reduction = 0;
+    }
+    
     start_time = std::chrono::steady_clock::now();
     time_limit_ms = 8500; // 9 seconds
     
@@ -522,7 +600,7 @@ Move findBestMove(Board &board, int depth) {
             move.promotion == ttEntry->bestMove.promotion) {
             move.score = 2000000;  // TT move - highest priority
         } else {
-            move.score = scoreMove(move, board, 0);  // ply=0 at root
+            move.score = scoreMove(move, board, stackPtr);  // stackPtr->ply = 0 at root
         }
     }
     std::sort(legalMoves.begin(), legalMoves.end(),
@@ -575,8 +653,13 @@ Move findBestMove(Board &board, int depth) {
             for (int i = 0; i < MAX_PLY; i++) childPv[i] = Move();
             
             BoardState state = board.makeMove(move);
-            // Root is always PV node - pass childPv array
-            int score = -alphaBeta(board, currentDepth - 1, -beta, -alpha, 1, true, childPv);
+            // Set up child stack for root search
+            (stackPtr + 1)->ply = 1;
+            (stackPtr + 1)->pv = childPv;
+            (stackPtr + 1)->reduction = 0;
+            (stackPtr + 1)->currentMove = move;
+            // Root is always PV node, never a cut node
+            int score = -alphaBeta<PV>(board, stackPtr + 1, currentDepth - 1, -beta, -alpha, false, nullptr);
             board.unmakeMove(move, state);
             
             if (out_of_time()) break;
@@ -627,5 +710,10 @@ Move findBestMove(Board &board, int depth) {
     
     return bestMove;
 }
+
+// Explicit template instantiations
+template int alphaBeta<NonPV>(Board &board, Stack* stackPtr, int depth, int alpha, int beta, bool cutNode, Move* bestMoveOut);
+template int alphaBeta<PV>(Board &board, Stack* stackPtr, int depth, int alpha, int beta, bool cutNode, Move* bestMoveOut);
+template int alphaBeta<Root>(Board &board, Stack* stackPtr, int depth, int alpha, int beta, bool cutNode, Move* bestMoveOut);
+
 } // namespace Search
-//

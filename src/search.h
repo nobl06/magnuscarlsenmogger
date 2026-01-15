@@ -5,6 +5,13 @@
 #include <cstdint>
 
 namespace Search {
+// Node types for search template parameter
+enum NodeType {
+    NonPV,  // Non-PV node (null window search)
+    PV,     // PV node (full window search)
+    Root    // Root node
+};
+
 // Constants
 // we have chosen 3200 as the mate_score since its high enough to clearly
 // be better than any positional evaluation
@@ -43,18 +50,6 @@ struct Info {
     }
 };
 
-// Main search entry point
-Move findBestMove(Board &board, int depth);
-
-// Internal alpha-beta function
-int alphaBeta(Board &board, int depth, int alpha, int beta, int ply, bool pvNode, Move* pv, Move* bestMoveOut = nullptr, bool isNullMove = false);
-
-// Quiescence search - searches captures until position is quiet
-int quiescence(Board &board, int alpha, int beta, int ply);
-
-// Helper function
-int getMateScore(int ply);
-
 // Killer moves: stores 2 quiet moves per ply that caused beta cutoffs
 struct KillerMoves {
     Move moves[2];
@@ -82,6 +77,35 @@ struct KillerMoves {
     }
 };
 
+// Stack structure to pass search context between plies
+struct Stack {
+    Move* pv;              // Principal variation array
+    int ply;               // Distance from root
+    Move currentMove;      // Move being searched
+    int reduction;         // LMR reduction applied at this node
+    int staticEval;        // Static evaluation of position
+    bool inCheck;          // Is king in check?
+    bool ttHit;            // Was there a TT hit?
+    bool ttPv;             // Is this part of PV from TT?
+};
+
+// Main search entry point
+Move findBestMove(Board &board, int depth);
+
+// Internal alpha-beta function
+template<NodeType NT>
+int alphaBeta(Board &board, Stack* stackPtr, int depth, int alpha, int beta, bool cutNode, Move* bestMoveOut = nullptr);
+
+// Quiescence search - searches captures until position is quiet
+int quiescence(Board &board, Stack* stackPtr, int alpha, int beta);
+
+// Helper function
+int getMateScore(const Stack* stackPtr);
+void initReductions();
+
+// Move ordering function
+int scoreMove(const Move& move, const Board& board, const Stack* stackPtr);
+
 // History heuristic: [from][to] -> score
 // Tracks how often a move causes a beta cutoff
 constexpr int HISTORY_MAX = 10000;  // Cap to prevent overflow
@@ -91,10 +115,6 @@ extern int history[64][64];
 // Late Move Reduction
 constexpr int LMR_TABLE_SIZE = 64;
 extern int reductionTable[LMR_TABLE_SIZE][LMR_TABLE_SIZE];
-void initReductions();
-
-// Move ordering function
-int scoreMove(const Move& move, const Board& board, int ply);
 
 // Global statistics
 extern Stats stats;
