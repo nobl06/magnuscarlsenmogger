@@ -3,6 +3,7 @@
 #include "eval/evaluate.h"
 #include "eval/psqt.h"
 #include "gen.hpp"
+#include "magic.h"
 #include "move.h"
 #include "search.h"
 #include "zobrist.h"
@@ -50,6 +51,9 @@ int main(int argc, char *argv[]) {
     
     // Initialize Zobrist hashing
     Zobrist::init();
+
+    // Initialize magic bitboards
+    Magic::init();
     
     // Initialize transposition table (already initialized globally, but clear it)
     TT::tt.clear();

@@ -1,6 +1,7 @@
 #include "board.h"
 #include "move.h"
 #include "zobrist.h"
+#include "magic.h"
 #include <cstdlib>
 #include <iostream>
 
@@ -835,47 +836,11 @@ uint64_t Board::getKnightAttacks(int square) {
 }
 
 uint64_t Board::getBishopAttacks(int square, uint64_t occupied) {
-    uint64_t attacks = 0;
-    int col = column(square);
-    int r = row(square);
-    
-    const int directions[4][2] = {{1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
-    
-    for (auto [dc, dr] : directions) {
-        int c = col + dc;
-        int rr = r + dr;
-        while (c >= 0 && c < 8 && rr >= 0 && rr < 8) {
-            int sq = position(c, rr);
-            attacks |= (1ULL << sq);
-            if (occupied & (1ULL << sq)) break;
-            c += dc;
-            rr += dr;
-        }
-    }
-    
-    return attacks;
+    return Magic::getBishopAttacks(square, occupied);
 }
 
 uint64_t Board::getRookAttacks(int square, uint64_t occupied) {
-    uint64_t attacks = 0;
-    int col = column(square);
-    int r = row(square);
-    
-    const int directions[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
-    
-    for (auto [dc, dr] : directions) {
-        int c = col + dc;
-        int rr = r + dr;
-        while (c >= 0 && c < 8 && rr >= 0 && rr < 8) {
-            int sq = position(c, rr);
-            attacks |= (1ULL << sq);
-            if (occupied & (1ULL << sq)) break;
-            c += dc;
-            rr += dr;
-        }
-    }
-    
-    return attacks;
+    return Magic::getRookAttacks(square, occupied);
 }
 
 uint64_t Board::getQueenAttacks(int square, uint64_t occupied) {
