@@ -1,5 +1,4 @@
 #pragma once
-#include <vector>
 #include "board.h"
 #include "move.h"
 
@@ -9,16 +8,17 @@ public:
         : board(b), color(sideToMove) {}
     
     // Main move generation functions
-    std::vector<Move> generatePseudoLegalMoves() const;
-    std::vector<Move> filterLegalMoves(const std::vector<Move>& pseudoLegalMoves);
+    size_t generatePseudoLegalMoves(Move moves[220]) const;
+    size_t filterLegalMoves(const Move pseudoLegalMoves[220], size_t pseudoLegalCount, Move legalMoves[220]);
     
     // Individual piece move generators
-    void generatePawnMoves(std::vector<Move>& moves, int from) const;
-    void generateKnightMoves(std::vector<Move>& moves, int from) const;
-    void generateBishopMoves(std::vector<Move>& moves, int from) const;
-    void generateRookMoves  (std::vector<Move>& moves, int from) const;
-    void generateQueenMoves (std::vector<Move>& moves, int from) const;
-    void generateKingMoves  (std::vector<Move>& moves, int from) const;
+    // moves array and moveCount are passed by reference to be modified
+    void generatePawnMoves(Move moves[220], size_t& moveCount, int from) const;
+    void generateKnightMoves(Move moves[220], size_t& moveCount, int from) const;
+    void generateBishopMoves(Move moves[220], size_t& moveCount, int from) const;
+    void generateRookMoves  (Move moves[220], size_t& moveCount, int from) const;
+    void generateQueenMoves (Move moves[220], size_t& moveCount, int from) const;
+    void generateKingMoves  (Move moves[220], size_t& moveCount, int from) const;
 
 private:
     Board& board;

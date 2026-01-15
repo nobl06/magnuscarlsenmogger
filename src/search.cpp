@@ -163,30 +163,35 @@ int quiescence(Board &board, Stack* stackPtr, int alpha, int beta) {
     
     // generate all moves
     MoveGenerator gen(board, board.sideToMove);
-    std::vector<Move> pseudoLegal = gen.generatePseudoLegalMoves();
-    std::vector<Move> legalMoves = gen.filterLegalMoves(pseudoLegal);
+    Move pseudoLegal[220];
+    size_t pseudoLegalCount = gen.generatePseudoLegalMoves(pseudoLegal);
+    Move legalMoves[220];
+    size_t legalCount = gen.filterLegalMoves(pseudoLegal, pseudoLegalCount, legalMoves);
     
     // filter to only tactical moves (captures and promotions)
-    std::vector<Move> tacticalMoves;
-    for (const Move& move : legalMoves) {
+    Move tacticalMoves[220];
+    size_t tacticalCount = 0;
+    for (size_t i = 0; i < legalCount; i++) {
+        const Move& move = legalMoves[i];
         PieceType victim = board.pieceAt(move.to);
         bool isCapture = (victim != PieceType::EMPTY);
         bool isPromotion = (move.promotion != PieceType::EMPTY);
         
         if (isCapture || isPromotion) {
-            tacticalMoves.push_back(move);
+            tacticalMoves[tacticalCount++] = move;
         }
     }
     
     // sort tactical moves by MVV-LVA
-    for (Move& move : tacticalMoves) {
-        move.score = scoreMove(move, board, stackPtr);
+    for (size_t i = 0; i < tacticalCount; i++) {
+        tacticalMoves[i].score = scoreMove(tacticalMoves[i], board, stackPtr);
     }
-    std::sort(tacticalMoves.begin(), tacticalMoves.end(),
+    std::sort(tacticalMoves, tacticalMoves + tacticalCount,
               [](const Move& a, const Move& b) { return a.score > b.score; });
     
     // search tactical moves
-    for (const Move& move : tacticalMoves) {
+    for (size_t i = 0; i < tacticalCount; i++) {
+        const Move& move = tacticalMoves[i];
         if (out_of_time()) break;
         
         // delta pruning - if this capture can't possibly raise alpha, skip it
@@ -355,11 +360,14 @@ int alphaBeta(Board &board, Stack* stackPtr, int depth, int alpha, int beta, boo
     
     // generate moves
     MoveGenerator gen(board, board.sideToMove);
-    std::vector<Move> pseudoLegal = gen.generatePseudoLegalMoves();
-    std::vector<Move> legalMoves = gen.filterLegalMoves(pseudoLegal);
+    Move pseudoLegal[220];
+    size_t pseudoLegalCount = gen.generatePseudoLegalMoves(pseudoLegal);
+    Move legalMoves[220];
+    size_t legalCount = gen.filterLegalMoves(pseudoLegal, pseudoLegalCount, legalMoves);
     
     // sort moves with score (TT move > Captures > Killers > History)
-    for (Move &move : legalMoves) {
+    for (size_t i = 0; i < legalCount; i++) {
+        Move &move = legalMoves[i];
         // Give TT move highest priority
         if (ttMove.from != 0 && move.from == ttMove.from && move.to == ttMove.to && 
             move.promotion == ttMove.promotion) {
@@ -368,11 +376,11 @@ int alphaBeta(Board &board, Stack* stackPtr, int depth, int alpha, int beta, boo
             move.score = scoreMove(move, board, stackPtr);
         }
     }
-    std::sort(legalMoves.begin(), legalMoves.end(),
+    std::sort(legalMoves, legalMoves + legalCount,
               [](const Move &a, const Move &b) { return a.score > b.score; });
     
     // check for checkmate/stalemate
-    if (legalMoves.empty()) {
+    if (legalCount == 0) {
         if (board.isKingInCheck(board.sideToMove)) {
             // checkmate - return mate score adjusted by ply
             return getMateScore(stackPtr);
@@ -390,7 +398,8 @@ int alphaBeta(Board &board, Stack* stackPtr, int depth, int alpha, int beta, boo
     // Child PV array
     Move childPv[MAX_PLY];
     
-    for (const Move &move : legalMoves) {
+    for (size_t i = 0; i < legalCount; i++) {
+        const Move &move = legalMoves[i];
         if (out_of_time()) break;
         
         moveCount++;
@@ -584,15 +593,18 @@ Move findBestMove(Board &board, int depth) {
     
     // generate root moves
     MoveGenerator gen(board, board.sideToMove);
-    std::vector<Move> pseudoLegal = gen.generatePseudoLegalMoves();
-    std::vector<Move> legalMoves = gen.filterLegalMoves(pseudoLegal);
+    Move pseudoLegal[220];
+    size_t pseudoLegalCount = gen.generatePseudoLegalMoves(pseudoLegal);
+    Move legalMoves[220];
+    size_t legalCount = gen.filterLegalMoves(pseudoLegal, pseudoLegalCount, legalMoves);
     
     // Check TT for move ordering
     uint64_t hashKey = board.hashKey;
     TT::TTEntry* ttEntry = TT::tt.probe(hashKey);
     
     // sort moves with score (TT > Captures > Killers > History)
-    for (Move &move : legalMoves) {
+    for (size_t i = 0; i < legalCount; i++) {
+        Move &move = legalMoves[i];
         // Give TT move highest priority
         if (ttEntry && ttEntry->bestMove.from != 0 && 
             move.from == ttEntry->bestMove.from && 
@@ -603,10 +615,10 @@ Move findBestMove(Board &board, int depth) {
             move.score = scoreMove(move, board, stackPtr);  // stackPtr->ply = 0 at root
         }
     }
-    std::sort(legalMoves.begin(), legalMoves.end(),
+    std::sort(legalMoves, legalMoves + legalCount,
               [](const Move &a, const Move &b) { return a.score > b.score; });
     
-    if (legalMoves.empty()) {
+    if (legalCount == 0) {
         return Move(); // no legal moves (checkmate or stalemate), return empty move
     }
     
@@ -634,18 +646,20 @@ Move findBestMove(Board &board, int depth) {
         
         // Re-sort moves using PV from previous iteration
         if (currentDepth > 1 && previousPv[0].from != 0) {
-            for (Move &move : legalMoves) {
+            for (size_t i = 0; i < legalCount; i++) {
+                Move &move = legalMoves[i];
                 // PV move from previous iteration gets highest priority
                 if (move.from == previousPv[0].from && move.to == previousPv[0].to &&
                     move.promotion == previousPv[0].promotion) {
                     move.score = 3000000;
                 }
             }
-            std::sort(legalMoves.begin(), legalMoves.end(),
+            std::sort(legalMoves, legalMoves + legalCount,
                       [](const Move &a, const Move &b) { return a.score > b.score; });
         }
         
-        for (const Move &move : legalMoves) {
+        for (size_t i = 0; i < legalCount; i++) {
+            const Move &move = legalMoves[i];
             if (out_of_time()) break;   
 
             // Child PV for this move

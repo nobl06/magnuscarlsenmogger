@@ -23,10 +23,13 @@
 // Find a move in the legal moves list that matches the UCI string
 Move findMoveFromString(Board &board, const std::string &moveStr) {
     MoveGenerator gen(board, board.sideToMove);
-    std::vector<Move> pseudoLegal = gen.generatePseudoLegalMoves();
-    std::vector<Move> legalMoves = gen.filterLegalMoves(pseudoLegal);
+    Move pseudoLegal[220];
+    size_t pseudoLegalCount = gen.generatePseudoLegalMoves(pseudoLegal);
+    Move legalMoves[220];
+    size_t legalCount = gen.filterLegalMoves(pseudoLegal, pseudoLegalCount, legalMoves);
     
-    for (const Move &m : legalMoves) {
+    for (size_t i = 0; i < legalCount; i++) {
+        const Move &m = legalMoves[i];
         std::string mStr = m.toString();
         // Handle promotion suffix (e.g., "e7e8q")
         if (m.promotion != PieceType::EMPTY) {

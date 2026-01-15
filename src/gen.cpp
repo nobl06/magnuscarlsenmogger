@@ -1,7 +1,7 @@
 #include "gen.hpp"
 
 // PAWNS ------------------------
-void MoveGenerator::generatePawnMoves(std::vector<Move> &moves, int from) const {
+void MoveGenerator::generatePawnMoves(Move moves[220], size_t& moveCount, int from) const {
     int col = Board::column(from);
     int row = Board::row(from);
 
@@ -20,18 +20,18 @@ void MoveGenerator::generatePawnMoves(std::vector<Move> &moves, int from) const 
 
         if (!(allOccupied & toBit)) {
             if (row + direction == promotionRank) {
-                moves.emplace_back(from, toSq, PieceType::QUEEN);
-                moves.emplace_back(from, toSq, PieceType::ROOK);
-                moves.emplace_back(from, toSq, PieceType::BISHOP);
-                moves.emplace_back(from, toSq, PieceType::KNIGHT);
+                moves[moveCount++] = Move(from, toSq, PieceType::QUEEN);
+                moves[moveCount++] = Move(from, toSq, PieceType::ROOK);
+                moves[moveCount++] = Move(from, toSq, PieceType::BISHOP);
+                moves[moveCount++] = Move(from, toSq, PieceType::KNIGHT);
             } else {
-                moves.emplace_back(from, toSq);
+                moves[moveCount++] = Move(from, toSq);
                 // If we are at the starting position we can do a double move
                 if (row == startRank) {
                     int to2Sq = from + 2 * direction * 8;
                     std::uint64_t to2Bit = 1ULL << to2Sq;
                     if (!(allOccupied & to2Bit)) {
-                        moves.emplace_back(from, to2Sq);
+                        moves[moveCount++] = Move(from, to2Sq);
                     }
                 }
             }
@@ -47,12 +47,12 @@ void MoveGenerator::generatePawnMoves(std::vector<Move> &moves, int from) const 
             int captureRank = Board::row(captureSq);
 
             if (captureRank == promotionRank) {
-                moves.emplace_back(from, captureSq, PieceType::QUEEN);
-                moves.emplace_back(from, captureSq, PieceType::ROOK);
-                moves.emplace_back(from, captureSq, PieceType::BISHOP);
-                moves.emplace_back(from, captureSq, PieceType::KNIGHT);
+                moves[moveCount++] = Move(from, captureSq, PieceType::QUEEN);
+                moves[moveCount++] = Move(from, captureSq, PieceType::ROOK);
+                moves[moveCount++] = Move(from, captureSq, PieceType::BISHOP);
+                moves[moveCount++] = Move(from, captureSq, PieceType::KNIGHT);
             } else {
-                moves.emplace_back(from, captureSq);
+                moves[moveCount++] = Move(from, captureSq);
             }
         }
     }
@@ -66,12 +66,12 @@ void MoveGenerator::generatePawnMoves(std::vector<Move> &moves, int from) const 
             int captureRank = Board::row(captureSq);
 
             if (captureRank == promotionRank) {
-                moves.emplace_back(from, captureSq, PieceType::QUEEN);
-                moves.emplace_back(from, captureSq, PieceType::ROOK);
-                moves.emplace_back(from, captureSq, PieceType::BISHOP);
-                moves.emplace_back(from, captureSq, PieceType::KNIGHT);
+                moves[moveCount++] = Move(from, captureSq, PieceType::QUEEN);
+                moves[moveCount++] = Move(from, captureSq, PieceType::ROOK);
+                moves[moveCount++] = Move(from, captureSq, PieceType::BISHOP);
+                moves[moveCount++] = Move(from, captureSq, PieceType::KNIGHT);
             } else {
-                moves.emplace_back(from, captureSq);
+                moves[moveCount++] = Move(from, captureSq);
             }
         }
     }
@@ -84,19 +84,19 @@ void MoveGenerator::generatePawnMoves(std::vector<Move> &moves, int from) const 
 
         // Check if we can capture en passant to the left
         if (col > 0 && epCol == col - 1 && epRow == row + direction) {
-            moves.emplace_back(from, epSquare);
+            moves[moveCount++] = Move(from, epSquare);
         }
 
         // Check if we can capture en passant to the right
         if (col < 7 && epCol == col + 1 && epRow == row + direction) {
-            moves.emplace_back(from, epSquare);
+            moves[moveCount++] = Move(from, epSquare);
         }
     }
 }
 
 // KNIGHTS ------------------------
 
-void MoveGenerator::generateKnightMoves(std::vector<Move> &moves, int from) const {
+void MoveGenerator::generateKnightMoves(Move moves[220], size_t& moveCount, int from) const {
     uint64_t attacks = Board::getKnightAttacks(from);
     uint64_t ownPieces = (color == Color::WHITE) ? board.getAllWhitePieces() : board.getAllBlackPieces();
     
@@ -106,13 +106,13 @@ void MoveGenerator::generateKnightMoves(std::vector<Move> &moves, int from) cons
     // Generate move for each attack square
     while (attacks) {
         int to = Board::popLsb(attacks);
-        moves.emplace_back(from, to);
+        moves[moveCount++] = Move(from, to);
     }
 }
 
 //  BISHOPS ------------------------
 
-void MoveGenerator::generateBishopMoves(std::vector<Move> &moves, int from) const {
+void MoveGenerator::generateBishopMoves(Move moves[220], size_t& moveCount, int from) const {
     uint64_t occupied = board.getAllPieces();
     uint64_t attacks = Board::getBishopAttacks(from, occupied);
     uint64_t ownPieces = (color == Color::WHITE) ? board.getAllWhitePieces() : board.getAllBlackPieces();
@@ -123,13 +123,13 @@ void MoveGenerator::generateBishopMoves(std::vector<Move> &moves, int from) cons
     // Generate move for each attack square
     while (attacks) {
         int to = Board::popLsb(attacks);
-        moves.emplace_back(from, to);
+        moves[moveCount++] = Move(from, to);
     }
 }
 
 //  ROOKS ------------------------
 
-void MoveGenerator::generateRookMoves(std::vector<Move> &moves, int from) const {
+void MoveGenerator::generateRookMoves(Move moves[220], size_t& moveCount, int from) const {
     uint64_t occupied = board.getAllPieces();
     uint64_t attacks = Board::getRookAttacks(from, occupied);
     uint64_t ownPieces = (color == Color::WHITE) ? board.getAllWhitePieces() : board.getAllBlackPieces();
@@ -140,13 +140,13 @@ void MoveGenerator::generateRookMoves(std::vector<Move> &moves, int from) const 
     // Generate move for each attack square
     while (attacks) {
         int to = Board::popLsb(attacks);
-        moves.emplace_back(from, to);
+        moves[moveCount++] = Move(from, to);
     }
 }
 
 //  QUEENS ------------------------
 
-void MoveGenerator::generateQueenMoves(std::vector<Move> &moves, int from) const {
+void MoveGenerator::generateQueenMoves(Move moves[220], size_t& moveCount, int from) const {
     uint64_t occupied = board.getAllPieces();
     uint64_t attacks = Board::getBishopAttacks(from, occupied) | Board::getRookAttacks(from, occupied);
     uint64_t ownPieces = (color == Color::WHITE) ? board.getAllWhitePieces() : board.getAllBlackPieces();
@@ -155,13 +155,13 @@ void MoveGenerator::generateQueenMoves(std::vector<Move> &moves, int from) const
     
     while (attacks) {
         int to = Board::popLsb(attacks);
-        moves.emplace_back(from, to);
+        moves[moveCount++] = Move(from, to);
     }
 }
 
 // KING ------------------------
 
-void MoveGenerator::generateKingMoves(std::vector<Move> &moves, int from) const {
+void MoveGenerator::generateKingMoves(Move moves[220], size_t& moveCount, int from) const {
     // Regular king moves
     uint64_t attacks = Board::getKingAttacks(from);
     uint64_t ownPieces = (color == Color::WHITE) ? board.getAllWhitePieces() : board.getAllBlackPieces();
@@ -172,7 +172,7 @@ void MoveGenerator::generateKingMoves(std::vector<Move> &moves, int from) const 
     // Generate move for each attack square
     while (attacks) {
         int to = Board::popLsb(attacks);
-        moves.emplace_back(from, to);
+        moves[moveCount++] = Move(from, to);
     }
 
     // Castling
@@ -185,7 +185,7 @@ void MoveGenerator::generateKingMoves(std::vector<Move> &moves, int from) const 
             int g1 = Board::position(6, 0);
             // Check that f1 and g1 are empty
             if (!((allOccupied >> f1) & 1) && !((allOccupied >> g1) & 1)) {
-                moves.emplace_back(from, g1);
+                moves[moveCount++] = Move(from, g1);
             }
         }
 
@@ -196,7 +196,7 @@ void MoveGenerator::generateKingMoves(std::vector<Move> &moves, int from) const 
             int b1 = Board::position(1, 0);
             // Check that b1, c1, d1 are empty
             if (!((allOccupied >> d1) & 1) && !((allOccupied >> c1) & 1) && !((allOccupied >> b1) & 1)) {
-                moves.emplace_back(from, c1);
+                moves[moveCount++] = Move(from, c1);
             }
         }
     } else {
@@ -205,7 +205,7 @@ void MoveGenerator::generateKingMoves(std::vector<Move> &moves, int from) const 
             int f8 = Board::position(5, 7);
             int g8 = Board::position(6, 7);
             if (!((allOccupied >> f8) & 1) && !((allOccupied >> g8) & 1)) {
-                moves.emplace_back(from, g8);
+                moves[moveCount++] = Move(from, g8);
             }
         }
 
@@ -215,14 +215,14 @@ void MoveGenerator::generateKingMoves(std::vector<Move> &moves, int from) const 
             int c8 = Board::position(2, 7);
             int b8 = Board::position(1, 7);
             if (!((allOccupied >> d8) & 1) && !((allOccupied >> c8) & 1) && !((allOccupied >> b8) & 1)) {
-                moves.emplace_back(from, c8);
+                moves[moveCount++] = Move(from, c8);
             }
         }
     }
 }
 
-std::vector<Move> MoveGenerator::generatePseudoLegalMoves() const {
-    std::vector<Move> moves;
+size_t MoveGenerator::generatePseudoLegalMoves(Move moves[220]) const {
+    size_t moveCount = 0;
 
     int c = color; // WHITE = 0, BLACK = 1
 
@@ -230,53 +230,54 @@ std::vector<Move> MoveGenerator::generatePseudoLegalMoves() const {
     uint64_t pawns = board.bitboards[c][PAWN];
     while (pawns) {
         int sq = Board::popLsb(pawns);
-        generatePawnMoves(moves, sq);
+        generatePawnMoves(moves, moveCount, sq);
     }
 
     // Knights
     uint64_t knights = board.bitboards[c][KNIGHT];
     while (knights) {
         int sq = Board::popLsb(knights);
-        generateKnightMoves(moves, sq);
+        generateKnightMoves(moves, moveCount, sq);
     }
 
     // Bishops
     uint64_t bishops = board.bitboards[c][BISHOP];
     while (bishops) {
         int sq = Board::popLsb(bishops);
-        generateBishopMoves(moves, sq);
+        generateBishopMoves(moves, moveCount, sq);
     }
 
     // Rooks
     uint64_t rooks = board.bitboards[c][ROOK];
     while (rooks) {
         int sq = Board::popLsb(rooks);
-        generateRookMoves(moves, sq);
+        generateRookMoves(moves, moveCount, sq);
     }
 
     // Queens
     uint64_t queens = board.bitboards[c][QUEEN];
     while (queens) {
         int sq = Board::popLsb(queens);
-        generateQueenMoves(moves, sq);
+        generateQueenMoves(moves, moveCount, sq);
     }
 
     // King
     uint64_t king = board.bitboards[c][KING];
     if (king) {
         int sq = Board::popLsb(king);
-        generateKingMoves(moves, sq);
+        generateKingMoves(moves, moveCount, sq);
     }
 
-    return moves;
+    return moveCount;
 }
 
-std::vector<Move> MoveGenerator::filterLegalMoves(const std::vector<Move> &pseudoLegalMoves) {
-    std::vector<Move> legalMoves;
+size_t MoveGenerator::filterLegalMoves(const Move pseudoLegalMoves[220], size_t pseudoLegalCount, Move legalMoves[220]) {
+    size_t legalCount = 0;
     Color ourColor = color;
     Color opponent = (ourColor == Color::WHITE) ? Color::BLACK : Color::WHITE;
 
-    for (const Move &move : pseudoLegalMoves) {
+    for (size_t i = 0; i < pseudoLegalCount; i++) {
+        const Move& move = pseudoLegalMoves[i];
         PieceType movedPiece = board.pieceAt(move.from);
         
         // Handle castling specially - need to check if king passes through check
@@ -304,9 +305,9 @@ std::vector<Move> MoveGenerator::filterLegalMoves(const std::vector<Move> &pseud
         board.unmakeMove(move, state);
         
         if (legal) {
-            legalMoves.emplace_back(move);
+            legalMoves[legalCount++] = move;
         }
     }
 
-    return legalMoves;
+    return legalCount;
 }
