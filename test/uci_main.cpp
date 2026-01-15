@@ -14,6 +14,7 @@
 #include "../src/search.h"
 #include "../src/zobrist.h"
 #include "../src/tt.h"
+#include "../src/magic.h"
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -197,6 +198,9 @@ void uciLoop() {
 }
 
 int main() {
+    // Initialize magic bitboards
+    Magic::init();
+    
     // Initialize piece-square tables
     PSQT::init();
     

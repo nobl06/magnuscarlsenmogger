@@ -156,9 +156,10 @@ namespace Magic {
     // Helper: Convert subset index to occupancy bitboard
     static uint64_t indexToOccupancy(int index, int bits, uint64_t mask) {
         uint64_t occupancy = 0ULL;
+        uint64_t maskCopy = mask;  // Don't modify the original mask
         for (int i = 0; i < bits; i++) {
-            int bitPos = __builtin_ctzll(mask);
-            mask &= mask - 1; // Clear LSB
+            int bitPos = __builtin_ctzll(maskCopy);
+            maskCopy &= maskCopy - 1; // Clear LSB
             if (index & (1 << i)) {
                 occupancy |= (1ULL << bitPos);
             }
