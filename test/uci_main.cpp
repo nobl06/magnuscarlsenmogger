@@ -33,7 +33,7 @@ const int SLOW_MODE_MAX_TIME = 10000;      // 10 seconds max per move
 const int SLOW_MODE_DEFAULT_TIME = 10000;  // 10 seconds default
 
 // ACTIVE MODE - Change this line to switch modes:
-const bool USE_QUICK_MODE = false;  // Set to true for quick, false for slow
+const bool USE_QUICK_MODE = true;  // Set to true for quick, false for slow
 
 // Active time settings based on mode
 const int MAX_TIME_PER_MOVE = USE_QUICK_MODE ? QUICK_MODE_MAX_TIME : SLOW_MODE_MAX_TIME;

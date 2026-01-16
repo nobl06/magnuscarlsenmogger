@@ -11,5 +11,5 @@ cmake ..  # only needed first time
 make -s
 cd ..
 
-./build/MagnusCarlsenMogger -H test/matein5.txt -m build/out.txt
+./build/MagnusCarlsenMogger -H test/moves_test.txt -m build/out.txt
 

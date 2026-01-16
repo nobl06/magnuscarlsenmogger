@@ -10,6 +10,7 @@
 
 std::chrono::steady_clock::time_point start_time; // Initialize timer
 int time_limit_ms = 9000;                         // 9 seconds
+int rootDepth = 0;                                // Current iteration's root depth
 
 inline bool out_of_time() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -235,6 +236,12 @@ int alphaBeta(Board &board, Stack* stackPtr, int depth, int alpha, int beta, boo
     if (stackPtr->pv) stackPtr->pv[0] = Move();
     if (out_of_time()) return alpha;
     
+    // Extend search when we're in check to find escapes
+    bool inCheck = board.isKingInCheck(board.sideToMove);
+    if (inCheck && depth <= 0 && stackPtr->ply < 2 * rootDepth) {
+        depth = 1;
+    }
+    
     // allNode = all moves fail low (not PV, not cut)
     const bool allNode = !(pvNode || cutNode);
     
@@ -412,6 +419,10 @@ int alphaBeta(Board &board, Stack* stackPtr, int depth, int alpha, int beta, boo
         // make/unmake method (efficient - no board copying)
         BoardState state = board.makeMove(move);
         
+        // Extend depth if move gives a check, improves probability of finding mate
+        bool givesCheck = board.isKingInCheck(board.sideToMove);
+        int extension = (givesCheck && stackPtr->ply < 2 * rootDepth) ? 1 : 0;
+        
         // Set up child stack
         (stackPtr + 1)->ply = stackPtr->ply + 1;
         (stackPtr + 1)->pv = childPv;
@@ -429,20 +440,23 @@ int alphaBeta(Board &board, Stack* stackPtr, int depth, int alpha, int beta, boo
         // Determine child cutNode (expected to fail high)
         bool childCutNode = !cutNode && bestScore == -INFINITY_SCORE;
         
+        // New depth with check extension
+        int newdepth = depth - 1 + extension;
+        
         // First move: always search at full depth with full window
         if (moveCount == 1) {
             (stackPtr + 1)->reduction = 0;
             if (childPvNode)
-                score = -alphaBeta<PV>(board, stackPtr + 1, depth - 1, -beta, -alpha, false, nullptr);
+                score = -alphaBeta<PV>(board, stackPtr + 1, newdepth, -beta, -alpha, false, nullptr);
             else
-                score = -alphaBeta<NonPV>(board, stackPtr + 1, depth - 1, -beta, -alpha, childCutNode, nullptr);
+                score = -alphaBeta<NonPV>(board, stackPtr + 1, newdepth, -beta, -alpha, childCutNode, nullptr);
         }
         // Later moves: use LMR with re-search
         else {
             // Calculate reduction for non-tactical quiet moves
             
-            // Only reduce quiet moves at sufficient depth
-            if (depth >= 3 && !isCapture && !isPromotion) {
+            // Only reduce quiet moves at sufficient depth and don't reduce checks
+            if (depth >= 3 && !isCapture && !isPromotion && !givesCheck) {
                 // Get base reduction from table
                 int d = std::min(depth, LMR_TABLE_SIZE - 1);
                 int m = std::min(moveCount, LMR_TABLE_SIZE - 1);
@@ -455,23 +469,23 @@ int alphaBeta(Board &board, Stack* stackPtr, int depth, int alpha, int beta, boo
             // Step 1: Search with reduced depth and null window
             if (reduction > 0) {
                 (stackPtr + 1)->reduction = reduction;
-                score = -alphaBeta<NonPV>(board, stackPtr + 1, depth - 1 - reduction, -(alpha + 1), -alpha, childCutNode, nullptr);
+                score = -alphaBeta<NonPV>(board, stackPtr + 1, newdepth - reduction, -(alpha + 1), -alpha, childCutNode, nullptr);
             } else {
                 // No reduction: just null window search (PVS)
                 (stackPtr + 1)->reduction = 0;
-                score = -alphaBeta<NonPV>(board, stackPtr + 1, depth - 1, -(alpha + 1), -alpha, childCutNode, nullptr);
+                score = -alphaBeta<NonPV>(board, stackPtr + 1, newdepth, -(alpha + 1), -alpha, childCutNode, nullptr);
             }
             
             // Step 2: If reduced search failed high, re-search at full depth with null window
             if (reduction > 0 && score > alpha) {
                 (stackPtr + 1)->reduction = 0;
-                score = -alphaBeta<NonPV>(board, stackPtr + 1, depth - 1, -(alpha + 1), -alpha, childCutNode, nullptr);
+                score = -alphaBeta<NonPV>(board, stackPtr + 1, newdepth, -(alpha + 1), -alpha, childCutNode, nullptr);
             }
             
             // Step 3: If still failed high and we're in PV node, re-search with full window
             if (score > alpha && score < beta && pvNode) {
                 (stackPtr + 1)->reduction = 0;
-                score = -alphaBeta<PV>(board, stackPtr + 1, depth - 1, -beta, -alpha, false, nullptr);
+                score = -alphaBeta<PV>(board, stackPtr + 1, newdepth, -beta, -alpha, false, nullptr);
             }
         }
         
@@ -630,6 +644,7 @@ Move findBestMove(Board &board, int depth) {
     
     // Iterative deepening
     for (int currentDepth = 1; currentDepth <= depth; currentDepth++) {
+        rootDepth = currentDepth;  // Store for check extension limits
         auto layer_start = std::chrono::steady_clock::now(); // Timing a depth
         uint64_t nodesAtStart = stats.nodes;
         
