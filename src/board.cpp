@@ -821,6 +821,12 @@ int Board::edgeDistance(int sq) {
     return std::min({col, 7 - col, r, 7 - r});
 }
 
+// Edge distance for a single rank or file value (0-7)
+// Like Stockfish's edge_distance(File) / edge_distance(Rank)
+int Board::rankOrFileEdgeDistance(int rankOrFile) {
+    return std::min(rankOrFile, 7 - rankOrFile);
+}
+
 // Square manipulation for endgame evaluation
 
 int Board::flipFile(int sq) {

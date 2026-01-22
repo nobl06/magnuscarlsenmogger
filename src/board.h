@@ -91,6 +91,8 @@ class Board {
     static int distance(int sq1, int sq2);
     static int columnDistance(int sq1, int sq2);
     static int edgeDistance(int sq);
+    // Edge distance for a single rank or file value (0-7) - used in endgame evaluation
+    static int rankOrFileEdgeDistance(int rankOrFile);
     
     // Square manipulation (for endgame evaluation)
     static int flipFile(int sq);

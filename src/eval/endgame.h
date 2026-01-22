@@ -15,14 +15,14 @@ constexpr int SCALE_FACTOR_NORMAL = 64;
 constexpr int SCALE_FACTOR_MAX = 128;
 constexpr int SCALE_FACTOR_NONE = 255;
 
-// Piece values for endgame calculations
-constexpr int PAWN_VALUE_EG = 208;
-constexpr int KNIGHT_VALUE_MG = 781;
-constexpr int BISHOP_VALUE_MG = 825;
-constexpr int ROOK_VALUE_MG = 1276;
-constexpr int ROOK_VALUE_EG = 1380;
-constexpr int QUEEN_VALUE_MG = 2538;
-constexpr int QUEEN_VALUE_EG = 2682;
+// Piece values for endgame calculations - Stockfish values
+constexpr int PawnValueEg = 208;
+constexpr int KnightValueMg = 781;
+constexpr int BishopValueMg = 825;
+constexpr int RookValueMg = 1276;
+constexpr int RookValueEg = 1380;
+constexpr int QueenValueMg = 2538;
+constexpr int QueenValueEg = 2682;
 
 // Endgame types
 enum EndgameType {
@@ -36,6 +36,11 @@ enum EndgameType {
     ENDGAME_KQKP,    // KQ vs KP
     ENDGAME_KQKR,    // KQ vs KR
     ENDGAME_KNNKP,   // KNN vs KP
+    
+    // Insufficient material (draws)
+    ENDGAME_KNK,     // KN vs K (insufficient material)
+    ENDGAME_KBK,     // KB vs K (insufficient material)
+    ENDGAME_KBKB,    // KB vs KB same color (draw)
     
     // Scaling functions (return scale factor 0-128)
     SCALE_KBPsK,     // KB + pawns vs K
@@ -65,10 +70,10 @@ int evaluate(const Board& board, const EndgameInfo& info);
 int getScaleFactor(const Board& board, const EndgameInfo& info);
 
 // Helper functions (used internally)
-int pushToEdge(int sq);
-int pushToCorner(int sq);
-int pushClose(int sq1, int sq2);
-int pushAway(int sq1, int sq2);
+int push_to_edge(int sq);
+int push_to_corner(int sq);
+int push_close(int sq1, int sq2);
+int push_away(int sq1, int sq2);
 
 // Evaluation functions
 int evaluateKXK(const Board& board, Color strongSide);

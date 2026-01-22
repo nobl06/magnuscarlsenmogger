@@ -136,9 +136,12 @@ void handleGo(Board &board, std::istringstream &is) {
     // Time management: set time_limit_ms and let iterative deepening work
     int searchDepth = depth;
     
+    // Minimum time to prevent issues with very low time controls
+    constexpr int MIN_TIME_MS = 50;
+    
     if (movetime > 0) {
         // Fixed time per move - use it directly, capped at max
-        time_limit_ms = std::min(movetime - 50, MAX_TIME_PER_MOVE);
+        time_limit_ms = std::max(MIN_TIME_MS, std::min(movetime - 50, MAX_TIME_PER_MOVE));
         searchDepth = 64;  // Let time control limit the search
     } else if (wtime > 0 || btime > 0) {
         // Time control - allocate time based on remaining time
@@ -148,8 +151,8 @@ void handleGo(Board &board, std::istringstream &is) {
         // Simple allocation: use ~1/30th of remaining time + increment
         int allocatedTime = ourTime / movestogo + ourInc;
         
-        // Set time limit with small buffer, capped at max
-        time_limit_ms = std::min(allocatedTime - 20, MAX_TIME_PER_MOVE);
+        // Set time limit with small buffer, capped at max, with minimum floor
+        time_limit_ms = std::max(MIN_TIME_MS, std::min(allocatedTime - 20, MAX_TIME_PER_MOVE));
         searchDepth = 64;  // Let time control limit the search
     } else if (infinite) {
         time_limit_ms = MAX_TIME_PER_MOVE;  // Use max time from active mode
@@ -162,6 +165,14 @@ void handleGo(Board &board, std::istringstream &is) {
 
     // Search for best move using iterative deepening with time control
     Move bestMove = Search::findBestMove(board, searchDepth);
+    
+    // Check if we got a valid move (from == 0 && to == 0 means no legal moves)
+    if (bestMove.from == 0 && bestMove.to == 0) {
+        // No legal moves - this is checkmate or stalemate
+        // Output "bestmove 0000" which is the UCI null move notation
+        std::cout << "bestmove 0000" << std::endl;
+        return;
+    }
     
     // Format output
     std::string moveStr = bestMove.toString();

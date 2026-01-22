@@ -91,21 +91,19 @@ int advancedEvaluate(const Board &board) {
     int egScore = materialEG + psqtEG + positionalEG;
 
     // STEP 3: Apply endgame scaling if applicable
+    // Scale factors: 0 = draw, 64 = normal, >64 = strong winning chances (boosts score)
+    // Stockfish applies scale factor to the endgame score to adjust winning chances
     if (endgameInfo && !endgameInfo->hasEvalFunction) {
         int sf = Endgame::getScaleFactor(board, *endgameInfo);
         if (sf != Endgame::SCALE_FACTOR_NONE) {
-            // Apply scale factor to the side that has the advantage
-            // Determine which side is ahead in endgame score
-            if (egScore > 0) {
-                // White is ahead - scale down if white is strong side, else different logic
-                if (endgameInfo->strongSide == WHITE) {
-                    egScore = egScore * sf / Endgame::SCALE_FACTOR_NORMAL;
-                }
-            } else if (egScore < 0) {
-                // Black is ahead
-                if (endgameInfo->strongSide == BLACK) {
-                    egScore = egScore * sf / Endgame::SCALE_FACTOR_NORMAL;
-                }
+            // Apply scale factor based on which side has the material advantage (strongSide)
+            // sf < 64: reduces winning chances (e.g., 0 = draw)
+            // sf = 64: normal evaluation
+            // sf > 64: boosts winning chances (up to 128 = 2x multiplier)
+            if (endgameInfo->strongSide == WHITE && egScore > 0) {
+                egScore = egScore * sf / Endgame::SCALE_FACTOR_NORMAL;
+            } else if (endgameInfo->strongSide == BLACK && egScore < 0) {
+                egScore = egScore * sf / Endgame::SCALE_FACTOR_NORMAL;
             }
         }
     }
