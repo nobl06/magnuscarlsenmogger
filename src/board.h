@@ -90,6 +90,14 @@ class Board {
     // Distance functions
     static int distance(int sq1, int sq2);
     static int columnDistance(int sq1, int sq2);
+    static int edgeDistance(int sq);
+    
+    // Square manipulation (for endgame evaluation)
+    static int flipFile(int sq);
+    static int flipRank(int sq);
+    static int relativeRank(Color c, int sq);
+    static int relativeSquare(Color c, int sq);
+    static int pawnPush(Color c);
     
     // Attack generation
     static uint64_t getKnightAttacks(int square);

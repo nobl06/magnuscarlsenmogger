@@ -815,6 +815,35 @@ int Board::columnDistance(int sq1, int sq2) {
     return std::abs(column(sq1) - column(sq2));
 }
 
+int Board::edgeDistance(int sq) {
+    int col = column(sq);
+    int r = row(sq);
+    return std::min({col, 7 - col, r, 7 - r});
+}
+
+// Square manipulation for endgame evaluation
+
+int Board::flipFile(int sq) {
+    return sq ^ 7;  // XOR with 7 flips file (a<->h, b<->g, etc.)
+}
+
+int Board::flipRank(int sq) {
+    return sq ^ 56;  // XOR with 56 flips rank (1<->8, 2<->7, etc.)
+}
+
+int Board::relativeRank(Color c, int sq) {
+    int r = row(sq);
+    return (c == WHITE) ? r : 7 - r;
+}
+
+int Board::relativeSquare(Color c, int sq) {
+    return (c == WHITE) ? sq : flipRank(sq);
+}
+
+int Board::pawnPush(Color c) {
+    return (c == WHITE) ? 8 : -8;
+}
+
 // Attack Generation Functions
 
 uint64_t Board::getKnightAttacks(int square) {

@@ -22,6 +22,7 @@ add_executable(MagnusCarlsenMogger
     src/eval/psqt.cpp
     src/eval/material.cpp
     src/eval/positional.cpp
+    src/eval/endgame.cpp
 )
 
 # UCI executable for Elo testing with cutechess-cli
@@ -39,4 +40,5 @@ add_executable(MagnusCarlsenMogger_UCI
     src/eval/psqt.cpp
     src/eval/material.cpp
     src/eval/positional.cpp
+    src/eval/endgame.cpp
 )

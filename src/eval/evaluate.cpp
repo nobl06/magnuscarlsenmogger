@@ -2,6 +2,7 @@
 #include "material.h"
 #include "positional.h"
 #include "psqt.h"
+#include "endgame.h"
 #include <algorithm>
 
 namespace Evaluation {
@@ -67,13 +68,47 @@ int basicEvaluate(const Board &board) {
 // ADVANCED EVALUATION
 // Full positional evaluation
 int advancedEvaluate(const Board &board) {
-    // Sum up all evaluation components
+    // STEP 1: Check for specialized endgame evaluation
+    auto endgameInfo = Endgame::detectEndgame(board);
+    
+    if (endgameInfo && endgameInfo->hasEvalFunction) {
+        // Use specialized endgame evaluator
+        int value = Endgame::evaluate(board, *endgameInfo);
+        // Return from side to move perspective
+        if (board.sideToMove == endgameInfo->strongSide) {
+            return value;
+        } else {
+            return -value;
+        }
+    }
+    
+    // STEP 2: Normal evaluation
     auto [materialMG, materialEG] = Material::evaluateMaterial(board);
     auto [psqtMG, psqtEG] = PSQT::evaluatePSQT(board);
     auto [positionalMG, positionalEG] = Positional::evaluatePositional(board);
 
     int mgScore = materialMG + psqtMG + positionalMG;
     int egScore = materialEG + psqtEG + positionalEG;
+
+    // STEP 3: Apply endgame scaling if applicable
+    if (endgameInfo && !endgameInfo->hasEvalFunction) {
+        int sf = Endgame::getScaleFactor(board, *endgameInfo);
+        if (sf != Endgame::SCALE_FACTOR_NONE) {
+            // Apply scale factor to the side that has the advantage
+            // Determine which side is ahead in endgame score
+            if (egScore > 0) {
+                // White is ahead - scale down if white is strong side, else different logic
+                if (endgameInfo->strongSide == WHITE) {
+                    egScore = egScore * sf / Endgame::SCALE_FACTOR_NORMAL;
+                }
+            } else if (egScore < 0) {
+                // Black is ahead
+                if (endgameInfo->strongSide == BLACK) {
+                    egScore = egScore * sf / Endgame::SCALE_FACTOR_NORMAL;
+                }
+            }
+        }
+    }
 
     // Adjust the endgame score based on position complexity
     auto [mgFinal, egFinal] = Positional::applyWinnable(board, mgScore, egScore);
