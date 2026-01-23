@@ -92,7 +92,7 @@ int main(int argc, char *argv[]) {
 
     // search for best move
     const int MAXDEPTH = 64;
-    time_limit_ms = 8000;  
+    time_limit_ms = 8500;  
     Move chosenMove = Search::findBestMove(board, MAXDEPTH);
 
     auto total_end = std::chrono::steady_clock::now();

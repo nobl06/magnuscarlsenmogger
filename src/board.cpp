@@ -2,6 +2,7 @@
 #include "move.h"
 #include "zobrist.h"
 #include "magic.h"
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
 
